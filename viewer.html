@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>HackChrono Viewer</title>
+    <style>
+      body { 
+        background: black; 
+        display: flex; 
+        flex-direction: column; 
+        justify-content: center; 
+        align-items: center; 
+        height: 100vh; 
+        margin: 0; 
+        color: white;
+        font-family: Arial, sans-serif;
+      }
+      video { 
+        width: 80%; 
+        max-height: 70vh;
+        border-radius: 10px; 
+        background: #222; 
+      }
+      .status {
+        margin-top: 20px;
+        padding: 10px;
+        border-radius: 5px;
+        font-weight: bold;
+      }
+      .connecting { background-color: #FFA500; }
+      .connected { background-color: #00AA00; }
+      .disconnected { background-color: #AA0000; }
+    </style>
+  </head>
+  <body>
+    <h1>HackChrono Live Stream</h1>
+    <video id="remoteVideo" autoplay playsinline controls muted></video>
+    <div id="videoStatus" style="margin-top: 10px; color: #ff9900;">No video received yet</div>
+    <div id="status" class="status connecting">Waiting for stream...</div>
+    <button id="unmuteButton" style="margin-top: 10px; display: none; padding: 5px 15px; background: #4285f4; color: white; border: none; border-radius: 4px; cursor: pointer;">Unmute Video</button>
+    
+    <script>
+      // Monitor video element for when it starts/stops playing
+      const videoStatus = document.getElementById('videoStatus');
+      
+      remoteVideo.onplaying = () => {
+        console.log("🎬 Video is now playing!");
+        videoStatus.textContent = "Video stream active";
+        videoStatus.style.color = "#00ff00";
+      };
+      
+      remoteVideo.onpause = () => {
+        console.log("⏸️ Video was paused");
+        videoStatus.textContent = "Video paused";
+        videoStatus.style.color = "#ffaa00";
+      };
+      
+      remoteVideo.onwaiting = () => {
+        console.log("⌛ Video is waiting for data");
+        videoStatus.textContent = "Buffering...";
+        videoStatus.style.color = "#ffaa00";
+      };
+      
+      remoteVideo.onerror = (e) => {
+        console.error("❌ Video error:", e);
+        videoStatus.textContent = "Video error occurred";
+        videoStatus.style.color = "#ff0000";
+      };
+    </script>
+    
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <script>
+      // DOM elements
+      const remoteVideo = document.getElementById("remoteVideo");
+      const statusElement = document.getElementById("status");
+      const connectButton = document.getElementById("connectButton"); // Reference the new button
+
+      // Update status display
+      function updateStatus(message, type) {
+        statusElement.textContent = message;
+        statusElement.className = `status ${type}`;
+      }
+
+      // WebRTC setup
+      let pc;
+      function setupPeerConnection() {
+        // Create new RTCPeerConnection
+        pc = new RTCPeerConnection({ 
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }] 
+        });
+        
+        // Handle incoming tracks
+        pc.ontrack = (event) => {
+          console.log("🎥 Got remote track", event.track.kind);
+          console.log("Stream ID:", event.streams[0].id);
+          console.log("Track settings:", event.track.getSettings());
+          
+          if (remoteVideo.srcObject !== event.streams[0]) {
+            remoteVideo.srcObject = event.streams[0];
+            updateStatus("Connected to stream", "connected");
+            
+            // Show unmute button if we have audio
+            if (event.track.kind === 'audio') {
+              document.getElementById('unmuteButton').style.display = 'block';
+            }
+          }
+        };
+        
+        // Handle connection state changes
+        pc.onconnectionstatechange = () => {
+          console.log("Connection state changed to:", pc.connectionState);
+          
+          if (pc.connectionState === "connected") {
+            updateStatus("Connected to stream", "connected");
+          } else if (pc.connectionState === "disconnected" || 
+                    pc.connectionState === "failed" ||
+                    pc.connectionState === "closed") {
+            updateStatus("Stream disconnected", "disconnected");
+          }
+        };
+        
+        // Handle ICE connection state changes
+        pc.oniceconnectionstatechange = () => {
+          console.log("ICE connection state changed to:", pc.iceConnectionState);
+        };
+        
+        // Handle signaling state changes
+        pc.onsignalingstatechange = () => {
+          console.log("Signaling state changed to:", pc.signalingState);
+        };
+        
+        // Handle ice candidates
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            console.log("🧊 Sending ICE candidate", event.candidate.candidate.substring(0, 50) + "...");
+            socket.emit("ice-candidate", event.candidate);
+          } else {
+            console.log("Finished gathering ICE candidates");
+          }
+        };
+        
+        // Log negotiation needed events
+        pc.onnegotiationneeded = () => {
+          console.log("Negotiation needed");
+        };
+        
+        return pc;
+      }
+
+      // Initialize socket variable but don't connect immediately
+      let socket;
+      
+      // Function to connect to the socket server
+      function connectToServer() {
+        if (socket && socket.connected) {
+          console.log("Already connected.");
+          return;
+        }
+        
+        updateStatus("Connecting to server...", "connecting");
+        socket = io("http://192.168.220.54:3000");
+        
+        // Set up socket event handlers
+        setupSocketHandlers();
+      }
+      
+      // Create a button to manually start the connection
+      const manualConnectButton = document.createElement("button");
+      manualConnectButton.id = "connectButton";
+      manualConnectButton.textContent = "Connect to Stream";
+      manualConnectButton.style.marginTop = "20px";
+      manualConnectButton.style.padding = "10px 20px";
+      manualConnectButton.style.backgroundColor = "#4CAF50";
+      manualConnectButton.style.color = "white";
+      manualConnectButton.style.border = "none";
+      manualConnectButton.style.borderRadius = "5px";
+      manualConnectButton.style.cursor = "pointer";
+      manualConnectButton.onclick = connectToServer;
+      document.body.appendChild(manualConnectButton);
+      
+      // Set up unmute button functionality
+      document.getElementById('unmuteButton').onclick = function() {
+        if (remoteVideo) {
+          remoteVideo.muted = false;
+          this.textContent = 'Audio Unmuted';
+          this.style.backgroundColor = '#00AA00';
+          console.log('Video unmuted');
+        }
+      };
+      
+      // Function to set up socket event handlers
+      function setupSocketHandlers() {
+        // Handle socket connection events
+        socket.on("connect", () => {
+          console.log("🔌 Connected to signaling server");
+          updateStatus("Connected. Requesting stream...", "connecting");
+          // NEW: Tell the server we want to join the stream
+          socket.emit("join-stream"); 
+        });
+        
+        socket.on("disconnect", () => {
+          console.log("❌ Disconnected from signaling server");
+          updateStatus("Disconnected from server", "disconnected");
+          
+          // Clean up peer connection
+          if (pc) {
+            pc.close();
+            pc = null;
+          }
+          
+          // Reset socket variable
+          socket = null;
+        });
+        
+        // Handle offer from broadcaster
+        socket.on("offer", async (offer) => {
+          try {
+            console.log("📡 Received offer from broadcaster");
+            console.log("SDP Type:", offer.type);
+            console.log("SDP Description (first 100 chars):", 
+              offer.sdp ? offer.sdp.substring(0, 100) + "..." : "No SDP");
+            
+            // If a peer connection already exists and isn't closed, close it first
+            if (pc && pc.connectionState !== "closed") {
+                console.log("Closing existing peer connection due to new offer");
+                pc.close();
+            }
+            
+            // Create a new peer connection for this offer
+            pc = setupPeerConnection();
+            console.log("New peer connection created");
+            
+            try {
+              // Set the remote description from the offer
+              console.log("Setting remote description...");
+              const rtcOffer = new RTCSessionDescription(offer);
+              await pc.setRemoteDescription(rtcOffer);
+              console.log("✅ Remote description set successfully");
+              
+              // Create and send an answer
+              console.log("Creating answer...");
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              console.log("💬 Sending answer to broadcaster");
+              socket.emit("answer", answer);
+              
+              updateStatus("Stream connecting...", "connecting");
+            } catch (err) {
+              console.error("❌ Error in WebRTC setup:", err);
+              updateStatus(`WebRTC Error: ${err.message}`, "disconnected");
+            }
+          } catch (err) {
+            console.error("❌ Error handling offer:", err);
+            updateStatus(`Error: ${err.message}`, "disconnected");
+          }
+        });
+      // Handle ICE candidates
+      socket.on("ice-candidate", async (candidate) => {
+        if (!pc || pc.connectionState === "closed") return;
+        
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          console.log("🧊 Added ICE candidate");
+        } catch (err) {
+          console.error("❌ Error adding ICE candidate:", err);
+        }
+      });
+      
+      // Handle broadcaster disconnection
+      socket.on("broadcaster-disconnected", () => {
+        console.log("📢 Broadcaster disconnected");
+        updateStatus("Stream ended", "disconnected");
+        
+        // Clean up video stream
+        if (remoteVideo.srcObject) {
+          remoteVideo.srcObject.getTracks().forEach(track => track.stop());
+          remoteVideo.srcObject = null;
+        }
+      });
+      }
+    </script>
+  </body>
+</html>
