@@ -15,6 +15,7 @@
         --card-bg: #1e293b;
         --text-color: #f8f9fa;
         --border-radius: 12px;
+        --capture-color: #ff6b6b;
       }
       
       * {
@@ -57,10 +58,7 @@
       .header h1 {
         font-size: 28px;
         font-weight: 700;
-        background: linear-gradient(90deg, var(--success-color), var(--primary-color));
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
+        color: var(--text-color);
       }
 
       .video-container {
@@ -188,6 +186,70 @@
         font-size: 14px;
       }
       
+      .control-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      
+      .btn-capture {
+        background-color: var(--capture-color);
+        color: white;
+      }
+      
+      .btn-capture:hover {
+        background-color: #e53e3e;
+        transform: translateY(-2px);
+      }
+      
+      .btn-capture.active {
+        background-color: #38a169;
+      }
+      
+      .frame-preview {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 15px;
+      }
+      
+      .frame-item {
+        position: relative;
+        width: 150px;
+        height: 100px;
+        border-radius: var(--border-radius);
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+      
+      .frame-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      
+      .frame-timestamp {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        font-size: 10px;
+        padding: 2px 5px;
+        text-align: center;
+      }
+      
+      .capture-status {
+        font-size: 14px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        background-color: var(--card-bg);
+        border: 1px solid #4a5568;
+        color: var(--text-color);
+        margin-left: 10px;
+      }
+      
       @media (max-width: 992px) {
         .app-container {
           grid-template-columns: 1fr;
@@ -196,6 +258,11 @@
             "video"
             "dashboard"
             "controls";
+        }
+        
+        .frame-item {
+          width: 120px;
+          height: 80px;
         }
       }
     </style>
@@ -220,10 +287,16 @@
       
       <div class="dashboard">
         <div class="dashboard-header">
-          <h2>Dashboard</h2>
+          <h2>Frame Capture Dashboard</h2>
+          <div class="control-group">
+            <button id="captureBtn" class="btn btn-capture">Start Capture</button>
+            <span id="captureStatus" class="capture-status">Frames: 0/7</span>
+          </div>
         </div>
         <div class="dashboard-content">
-          <p>Dashboard content will appear here.</p>
+          <div id="framePreview" class="frame-preview">
+            <p>Captured frames will appear here.</p>
+          </div>
         </div>
       </div>
       
@@ -258,6 +331,177 @@
         videoStatus.textContent = "Video error occurred";
         videoStatus.style.color = "#ff0000";
       };
+      
+      // Frame capture functionality
+      const FRAMES_PER_SECOND = 3; // Capture 3 frames per second
+      const MAX_FRAMES = 7; // Maximum frames to store
+      const capturedFrames = []; // Array to store captured frames
+      let captureInterval;
+      let isCapturing = false;
+      
+      // Function to capture a single frame
+      function captureFrame() {
+        const video = document.getElementById('remoteVideo');
+        
+        // Check if video is playing
+        if (!video || video.readyState < 2 || !video.srcObject) {
+          console.log('Video not ready for capture');
+          return null;
+        }
+        
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        
+        // Set canvas dimensions to match video dimensions
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        
+        // Draw current video frame on canvas
+        try {
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          // Convert canvas to blob
+          return new Promise(resolve => {
+            canvas.toBlob(blob => {
+              if (!blob) {
+                console.error('Failed to capture frame');
+                resolve(null);
+                return;
+              }
+              
+              const timestamp = new Date().toISOString();
+              const frameData = {
+                blob: blob,
+                timestamp: timestamp,
+                filename: `frame-${timestamp.replace(/:/g, '-')}.png`,
+                url: URL.createObjectURL(blob)
+              };
+              
+              // Add to our queue
+              capturedFrames.push(frameData);
+              
+              // If we exceed capacity, remove oldest frame
+              if (capturedFrames.length > MAX_FRAMES) {
+                const removedFrame = capturedFrames.shift();
+                console.log(`Removed oldest frame: ${removedFrame.filename}`);
+                URL.revokeObjectURL(removedFrame.url); // Free up memory
+              }
+              
+              console.log(`Captured frame: ${frameData.filename}`);
+              resolve(frameData);
+            }, 'image/png', 0.8); // 0.8 quality for better performance
+          });
+        } catch (e) {
+          console.error('Error capturing frame:', e);
+          return null;
+        }
+      }
+      
+      // Function to toggle frame capture
+      async function toggleFrameCapture() {
+        const captureBtn = document.getElementById('captureBtn');
+        
+        if (isCapturing) {
+          // Stop capturing
+          clearInterval(captureInterval);
+          captureBtn.textContent = 'Start Capture';
+          captureBtn.classList.remove('active');
+          isCapturing = false;
+          console.log('Frame capture stopped');
+        } else {
+          // Start capturing
+          isCapturing = true;
+          captureBtn.textContent = 'Stop Capture';
+          captureBtn.classList.add('active');
+          console.log('Frame capture started');
+          
+          // Calculate interval based on frames per second
+          const interval = 1000 / FRAMES_PER_SECOND;
+          
+          // Immediate first capture
+          const frame = await captureFrame();
+          if (frame) updateFrameDisplay();
+          
+          // Set interval for subsequent captures
+          captureInterval = setInterval(async () => {
+            const frame = await captureFrame();
+            if (frame) updateFrameDisplay();
+            updateCaptureStatus();
+          }, interval);
+        }
+      }
+      
+      // Function to update the frame display in the dashboard
+      function updateFrameDisplay() {
+        const framePreview = document.getElementById('framePreview');
+        if (!framePreview) return;
+        
+        // Clear existing content
+        framePreview.innerHTML = '';
+        
+        // Add each frame to the preview
+        capturedFrames.forEach((frame, index) => {
+          const frameElement = document.createElement('div');
+          frameElement.className = 'frame-item';
+          
+          const img = document.createElement('img');
+          img.src = frame.url;
+          img.alt = `Frame ${index + 1}`;
+          frameElement.appendChild(img);
+          
+          const timestamp = document.createElement('div');
+          timestamp.className = 'frame-timestamp';
+          timestamp.textContent = new Date(frame.timestamp).toLocaleTimeString();
+          frameElement.appendChild(timestamp);
+          
+          framePreview.appendChild(frameElement);
+        });
+        
+        // Save frames to server if we're using the server component
+        saveFramesToServer();
+      }
+      
+      // Function to save frames to server
+      async function saveFramesToServer() {
+        if (capturedFrames.length === 0) return;
+        
+        try {
+          // We'll only send the last captured frame to avoid overwhelming the server
+          const latestFrame = capturedFrames[capturedFrames.length - 1];
+          
+          const formData = new FormData();
+          formData.append('frames', latestFrame.blob, latestFrame.filename);
+          
+          // Replace with your server address if different
+          const serverUrl = 'http://localhost:3000/api/save-frames';
+          
+          // Use fetch API to send the frame
+          fetch(serverUrl, {
+            method: 'POST',
+            body: formData
+          }).then(response => response.json())
+            .then(data => console.log('Frame saved to server:', data))
+            .catch(err => console.error('Error saving to server:', err));
+        } catch (error) {
+          console.error('Error in saveFramesToServer:', error);
+        }
+      }
+      
+      // Function to update capture status in the UI
+      function updateCaptureStatus() {
+        const statusElement = document.getElementById('captureStatus');
+        if (!statusElement) return;
+        
+        statusElement.textContent = `Frames: ${capturedFrames.length}/${MAX_FRAMES}`;
+      }
+      
+      // Set up capture button
+      document.addEventListener('DOMContentLoaded', () => {
+        const captureBtn = document.getElementById('captureBtn');
+        if (captureBtn) {
+          captureBtn.addEventListener('click', toggleFrameCapture);
+        }
+      });
     </script>
     
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
