@@ -1,42 +1,235 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>HackChrono Viewer</title>
+    <title>Atmos Emission Surveillance</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+      :root {
+        --primary-color: #4361ee;
+        --secondary-color: #3f37c9;
+        --success-color: #4cc9f0;
+        --danger-color: #f72585;
+        --warning-color: #f8961e;
+        --background-color: #0f172a;
+        --card-bg: #1e293b;
+        --text-color: #f8f9fa;
+        --border-radius: 12px;
+      }
+      
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
       body { 
-        background: black; 
-        display: flex; 
-        flex-direction: column; 
-        justify-content: center; 
-        align-items: center; 
-        height: 100vh; 
-        margin: 0; 
-        color: white;
-        font-family: Arial, sans-serif;
+        background: var(--background-color); 
+        color: var(--text-color);
+        font-family: 'Inter', sans-serif;
+        line-height: 1.6;
+        height: 100vh;
+        margin: 0;
+        overflow-x: hidden;
       }
+      
+      .app-container {
+        display: grid;
+        grid-template-columns: 1fr 2fr;
+        grid-template-rows: auto 1fr auto;
+        grid-template-areas:
+          "header header"
+          "video dashboard"
+          "controls controls";
+        gap: 20px;
+        padding: 20px;
+        height: 100vh;
+      }
+      
+      .header {
+        grid-area: header;
+        padding: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .header h1 {
+        font-size: 28px;
+        font-weight: 700;
+        background: linear-gradient(90deg, var(--success-color), var(--primary-color));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .video-container {
+        grid-area: video;
+        background: var(--card-bg);
+        border-radius: var(--border-radius);
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      
+      .monitor-label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      
+      .monitor-label span {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      
+      .monitor-label .indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: var(--warning-color);
+      }
+      
+      .indicator.active {
+        background-color: var(--success-color);
+      }
+      
       video { 
-        width: 80%; 
-        max-height: 70vh;
-        border-radius: 10px; 
-        background: #222; 
+        width: 100%; 
+        border-radius: var(--border-radius);
+        background: #111827; 
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
       }
-      .status {
-        margin-top: 20px;
-        padding: 10px;
-        border-radius: 5px;
-        font-weight: bold;
+      
+      .dashboard {
+        grid-area: dashboard;
+        background: var(--card-bg);
+        border-radius: var(--border-radius);
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
       }
-      .connecting { background-color: #FFA500; }
-      .connected { background-color: #00AA00; }
-      .disconnected { background-color: #AA0000; }
+      
+      .dashboard-header {
+        border-bottom: 1px solid #2d3748;
+        padding-bottom: 15px;
+        margin-bottom: 20px;
+      }
+      
+      .controls {
+        grid-area: controls;
+        display: flex;
+        gap: 15px;
+        padding: 15px;
+        background: var(--card-bg);
+        border-radius: var(--border-radius);
+        justify-content: center;
+        align-items: center;
+      }
+      
+      .btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .btn-primary {
+        background-color: var(--primary-color);
+        color: white;
+      }
+      
+      .btn-primary:hover {
+        background-color: var(--secondary-color);
+        transform: translateY(-2px);
+      }
+      
+      .btn-secondary {
+        background-color: transparent;
+        color: var(--text-color);
+        border: 1px solid var(--primary-color);
+      }
+      
+      .btn-secondary:hover {
+        background-color: rgba(67, 97, 238, 0.1);
+      }
+      
+      .status-badge {
+        padding: 8px 15px;
+        border-radius: 30px;
+        font-size: 14px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      
+      .connecting { background-color: var(--warning-color); color: #000; }
+      .connected { background-color: var(--success-color); color: #000; }
+      .disconnected { background-color: var(--danger-color); color: white; }
+      
+      .video-info {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      
+      .info-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+      }
+      
+      @media (max-width: 992px) {
+        .app-container {
+          grid-template-columns: 1fr;
+          grid-template-areas:
+            "header"
+            "video"
+            "dashboard"
+            "controls";
+        }
+      }
     </style>
   </head>
   <body>
-    <h1>HackChrono Live Stream</h1>
-    <video id="remoteVideo" autoplay playsinline controls muted></video>
-    <div id="videoStatus" style="margin-top: 10px; color: #ff9900;">No video received yet</div>
-    <div id="status" class="status connecting">Waiting for stream...</div>
-    <button id="unmuteButton" style="margin-top: 10px; display: none; padding: 5px 15px; background: #4285f4; color: white; border: none; border-radius: 4px; cursor: pointer;">Unmute Video</button>
+    <div class="app-container">
+      <header class="header">
+        <h1>Atmos Emission Surveillance</h1>
+        <div id="status" class="status-badge connecting">Waiting for stream...</div>
+      </header>
+      
+      <div class="video-container">
+        <div class="monitor-label">
+          <div id="monitor-indicator" class="indicator"></div>
+          <span>Monitor 1</span>
+        </div>
+        <video id="remoteVideo" autoplay playsinline controls muted></video>
+        <div class="video-info">
+          <div id="videoStatus" class="info-row">No video received yet</div>
+        </div>
+      </div>
+      
+      <div class="dashboard">
+        <div class="dashboard-header">
+          <h2>Dashboard</h2>
+        </div>
+        <div class="dashboard-content">
+          <p>Dashboard content will appear here.</p>
+        </div>
+      </div>
+      
+      <div class="controls">
+        <button id="connectButton" class="btn btn-primary">Connect to Stream</button>
+        <button id="unmuteButton" class="btn btn-secondary" style="display: none;">Unmute Audio</button>
     
     <script>
       // Monitor video element for when it starts/stops playing
@@ -72,12 +265,19 @@
       // DOM elements
       const remoteVideo = document.getElementById("remoteVideo");
       const statusElement = document.getElementById("status");
-      const connectButton = document.getElementById("connectButton"); // Reference the new button
 
       // Update status display
       function updateStatus(message, type) {
         statusElement.textContent = message;
-        statusElement.className = `status ${type}`;
+        statusElement.className = `status-badge ${type}`;
+        
+        // Update monitor indicator based on connection status
+        const indicator = document.getElementById('monitor-indicator');
+        if (type === 'connected') {
+          indicator.classList.add('active');
+        } else {
+          indicator.classList.remove('active');
+        }
       }
 
       // WebRTC setup
@@ -163,26 +363,16 @@
         setupSocketHandlers();
       }
       
-      // Create a button to manually start the connection
-      const manualConnectButton = document.createElement("button");
-      manualConnectButton.id = "connectButton";
-      manualConnectButton.textContent = "Connect to Stream";
-      manualConnectButton.style.marginTop = "20px";
-      manualConnectButton.style.padding = "10px 20px";
-      manualConnectButton.style.backgroundColor = "#4CAF50";
-      manualConnectButton.style.color = "white";
-      manualConnectButton.style.border = "none";
-      manualConnectButton.style.borderRadius = "5px";
-      manualConnectButton.style.cursor = "pointer";
-      manualConnectButton.onclick = connectToServer;
-      document.body.appendChild(manualConnectButton);
+      // Set up connect button
+      const connectButton = document.getElementById("connectButton");
+      connectButton.onclick = connectToServer;
       
       // Set up unmute button functionality
       document.getElementById('unmuteButton').onclick = function() {
         if (remoteVideo) {
           remoteVideo.muted = false;
           this.textContent = 'Audio Unmuted';
-          this.style.backgroundColor = '#00AA00';
+          this.classList.add('connected');
           console.log('Video unmuted');
         }
       };
@@ -278,5 +468,7 @@
       });
       }
     </script>
+      </div>
+    </div>
   </body>
 </html>
