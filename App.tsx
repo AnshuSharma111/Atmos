@@ -146,7 +146,9 @@ function BroadcasterContent() {
         socketRef.current = null;
       }
       
-      console.log(`Connecting to signaling server at ${SIGNALING_SERVER_URL}`);
+      console.log(`[BROADCASTER] Connecting to signaling server at ${SIGNALING_SERVER_URL}`);
+      console.log(`[BROADCASTER] Transport methods: websocket, polling`);
+      console.log(`[BROADCASTER] Timeout: 20 seconds`);
       
       // Connect to signaling server with improved options
       socketRef.current = io(SIGNALING_SERVER_URL, {
@@ -156,18 +158,44 @@ function BroadcasterContent() {
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         timeout: 20000,
+        forceNew: true, // Force a new connection
       });
       
+      // CRITICAL FIX: Wait for socket to connect before proceeding with camera setup
+      // This prevents "Socket not connected" error during registration
+      await new Promise<void>((resolve, reject) => {
+        const connectionTimeout = setTimeout(() => {
+          reject(new Error('Socket connection timeout after 20 seconds'));
+        }, 20000);
+        
+        // Set up socket event handlers
+        socketRef.current.on('connect', () => {
+          clearTimeout(connectionTimeout);
+          console.log('[BROADCASTER] ✅ Connected to signaling server');
+          console.log('[BROADCASTER] Socket ID:', socketRef.current?.id);
+          console.log('[BROADCASTER] Server URL:', SIGNALING_SERVER_URL);
+          console.log('[BROADCASTER] Socket ready! Now proceeding with camera setup...');
+          resolve();
+        });
+        
+        socketRef.current.on('connect_error', (error: any) => {
+          clearTimeout(connectionTimeout);
+          console.error('[BROADCASTER] ❌ Socket connection error:', error);
+          console.error('[BROADCASTER] Error type:', error.type);
+          console.error('[BROADCASTER] Error message:', error.message);
+          console.error('[BROADCASTER] Full error:', JSON.stringify(error, null, 2));
+          
+          Alert.alert(
+            'Connection Error', 
+            `Cannot connect to streaming server.\n\nServer: ${SIGNALING_SERVER_URL}\n\nError: ${error.message}\n\nPlease check:\n1. Server is running (might be sleeping)\n2. URL is correct\n3. Network connection\n4. Firewall settings`
+          );
+          reject(error);
+        });
+      });
+      
+      // Socket is now connected! Set up remaining event handlers
       // Flag to track if we've registered successfully
       let broadcasterRegistered = false;
-      
-      // Set up socket event handlers
-      socketRef.current.on('connect', () => {
-        console.log('[BROADCASTER] Connected to signaling server');
-        // DON'T register immediately - wait for stream to be ready
-        // Registration will happen after getUserMedia completes
-        console.log('[BROADCASTER] Socket connected, waiting for media stream before registration...');
-      });
       
       // Listen for confirmation of monitor number assignment which indicates successful registration
       socketRef.current.on('monitor-number', (data: {broadcasterId: string, number: number}) => {
@@ -182,12 +210,6 @@ function BroadcasterContent() {
         if (isStreaming) {
           Alert.alert('Connection Lost', 'Lost connection to the streaming server');
         }
-      });
-      
-      socketRef.current.on('connect_error', (error: Error) => {
-        console.error('Socket connection error:', error);
-        Alert.alert('Connection Error', `Could not connect to the streaming server at ${SIGNALING_SERVER_URL}. Error: ${error.message}`);
-        stopStreaming();
       });
       
       // Handle viewer connection requests
