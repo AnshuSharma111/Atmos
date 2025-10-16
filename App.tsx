@@ -1,7 +1,5 @@
 /**
- * HackChronoApp with WebRTC Streaming
- * 
- * @format
+ * Simple Broadcaster App
  */
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -35,7 +33,15 @@ import io from 'socket.io-client';
 registerGlobals();
 
 // Replace with your signaling server's IP address or domain
-const SIGNALING_SERVER_URL = 'http://192.168.220.54:3000';
+// Make sure this is pointing to your actual server IP
+// NOTE: "localhost" or "127.0.0.1" won't work from a physical device!
+// Use your computer's actual LAN IP address
+// UPDATED: Port 3001 matches server configuration in server.js
+const SIGNALING_SERVER_URL = 'http://192.168.220.54:3001'; 
+
+// Important: If your device can't connect, double-check this IP address
+// It must match your computer's actual IP address on the network
+console.log('Connecting to signaling server at:', SIGNALING_SERVER_URL);
 
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -58,6 +64,8 @@ function AppContent() {
   const [hasMicrophonePermission, setHasMicrophonePermission] = useState(false);
   const [isCameraStreamingMode, setIsCameraStreamingMode] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [broadcasterId, setBroadcasterId] = useState<string | null>(null);
+  const [monitorNumber, setMonitorNumber] = useState<number | null>(null);
   const device = useCameraDevice('back');
   const camera = useRef<Camera>(null);
 
@@ -156,8 +164,60 @@ function AppContent() {
       await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
 
       // Connect to signaling server
-      socketRef.current = io(SIGNALING_SERVER_URL);
-      console.log('🔌 Connected to signaling server');
+      // Connect with more robust configuration
+      socketRef.current = io(SIGNALING_SERVER_URL, {
+        transports: ['websocket', 'polling'],
+        timeout: 20000, // 20 second timeout (increased for reliability)
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        forceNew: true,
+        autoConnect: true
+      });
+      console.log('🔌 Connecting to signaling server at', SIGNALING_SERVER_URL);
+      
+      // Add connection event handlers
+      socketRef.current.on('connect', () => {
+        console.log('🔌 Successfully connected to signaling server');
+      });
+      
+      socketRef.current.on('connect_error', (error: Error) => {
+        console.error('❌ Socket connection error:', error);
+        Alert.alert('Connection Error', 
+          `Could not connect to the server (${error.message}). Please check your network and server address.`,
+          [
+            { text: 'Retry', onPress: () => socketRef.current?.connect() },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      });
+
+      // Add a unique identifier for this broadcaster
+      const deviceType = Platform.OS === 'ios' ? 'iOS' : 'Android';
+      const newBroadcasterId = deviceType + '_' + Math.random().toString(36).substring(2, 10);
+      const deviceName = deviceType + ' Camera';
+      setBroadcasterId(newBroadcasterId);
+      
+      // Make sure the socket is connected before registering
+      if (socketRef.current.connected) {
+        console.log(`🔌 Registering as broadcaster with ID: ${newBroadcasterId}`);
+        socketRef.current.emit('register-broadcaster', { id: newBroadcasterId, name: deviceName });
+      } else {
+        console.log(`⏳ Waiting for socket connection before registering...`);
+        socketRef.current.on('connect', () => {
+          console.log(`🔌 Socket connected, now registering as broadcaster with ID: ${newBroadcasterId}`);
+          socketRef.current.emit('register-broadcaster', { id: newBroadcasterId, name: deviceName });
+        });
+      }
+      
+      // Handle monitor number assignment
+      socketRef.current.on('monitor-number', (data: { broadcasterId: string, number: number }) => {
+        if (data.broadcasterId === newBroadcasterId) {
+          console.log(`📺 Assigned Monitor Number: ${data.number}`);
+          setMonitorNumber(data.number);
+        }
+      });
 
       // Create PeerConnection
       pcRef.current = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -165,7 +225,18 @@ function AppContent() {
       // Handle local ICE candidates
       pcRef.current.onicecandidate = (event: any) => {
         if (event.candidate) {
-          socketRef.current.emit('ice-candidate', event.candidate);
+          console.log('Sending ICE candidate:', event.candidate.candidate.substring(0, 50) + '...');
+          
+          // Send the complete candidate object with all properties
+          socketRef.current.emit('ice-candidate', {
+            candidate: {
+              candidate: event.candidate.candidate,
+              sdpMid: event.candidate.sdpMid,
+              sdpMLineIndex: event.candidate.sdpMLineIndex,
+              usernameFragment: event.candidate.usernameFragment
+            },
+            broadcasterId: broadcasterId
+          });
         }
       };
       
@@ -254,7 +325,12 @@ function AppContent() {
       const hasAudio = sdp.includes('m=audio');
       console.log(`Offer SDP contains: ${hasVideo ? '✓' : '✗'} video, ${hasAudio ? '✓' : '✗'} audio`);
       
-      socketRef.current.emit('offer', pcRef.current.localDescription);
+      // Send the offer to all viewers through the server
+      console.log(`📤 Sending offer to signaling server with broadcaster ID: ${broadcasterId}`);
+      socketRef.current.emit('offer', {
+        sdp: pcRef.current.localDescription,
+        broadcasterId: broadcasterId
+      });
 
       // Handle incoming answer
       socketRef.current.on('answer', async (answer: any) => {
@@ -270,28 +346,68 @@ function AppContent() {
           const currentState = pcRef.current.signalingState;
           console.log('Current signaling state:', currentState);
           
+          // Extract the SDP from whatever format it comes in
+          const sdp = answer.sdp || answer.answer || answer;
+          
+          if (!sdp || !sdp.type || !sdp.sdp) {
+            console.error('Invalid answer format:', JSON.stringify(answer));
+            return;
+          }
+          
           // Create proper RTCSessionDescription
-          const rtcAnswer = new RTCSessionDescription(answer);
+          const rtcAnswer = new RTCSessionDescription({
+            type: 'answer',
+            sdp: sdp.sdp
+          });
+          
           await pcRef.current.setRemoteDescription(rtcAnswer);
           console.log('Remote description set successfully');
         } catch (err) {
           console.error('Error setting remote description:', err);
+          
+          // Log detailed error info to help with debugging
+          console.log('Answer format received:', answer);
+          if (typeof answer === 'object') {
+            console.log('Answer keys:', Object.keys(answer));
+          }
         }
       });
 
       // Handle incoming ICE candidate
-      socketRef.current.on('ice-candidate', async (candidate: any) => {
+      socketRef.current.on('ice-candidate', async (data: any) => {
         try {
           if (!pcRef.current) {
             console.log('No peer connection when receiving ICE candidate');
             return;
           }
           
-          const iceCandidate = new RTCIceCandidate(candidate);
+          // Extract the ICE candidate from whatever format it comes in
+          const candidateData = data.candidate || data;
+          
+          console.log('Received ICE candidate data:', JSON.stringify(candidateData).substring(0, 100));
+          
+          // Make sure we have a valid ICE candidate with at least one identifier
+          if (!candidateData || (candidateData.sdpMLineIndex === null && !candidateData.sdpMid)) {
+            console.warn('Skipping invalid ICE candidate - missing both sdpMLineIndex and sdpMid');
+            return;
+          }
+          
+          // Create a complete candidate object with default values if needed
+          const completeCandidate = {
+            candidate: candidateData.candidate || '',
+            sdpMLineIndex: candidateData.sdpMLineIndex !== undefined ? candidateData.sdpMLineIndex : 0,
+            sdpMid: candidateData.sdpMid || '0',
+            usernameFragment: candidateData.usernameFragment
+          };
+          
+          // Create proper RTCIceCandidate
+          const iceCandidate = new RTCIceCandidate(completeCandidate);
           await pcRef.current.addIceCandidate(iceCandidate);
           console.log('Added ICE candidate successfully');
         } catch (err) {
           console.error('❌ Error adding ICE candidate:', err);
+          // Log more details for debugging
+          console.log('Candidate data received:', data);
         }
       });
 
@@ -366,7 +482,9 @@ function AppContent() {
       {isStreaming && (
         <View style={[styles.camera, styles.streamingBackground]}>
           <Text style={styles.streamingPlaceholderText}>
-            Camera is streaming to viewers
+            {monitorNumber 
+              ? `Camera is streaming as Monitor ${monitorNumber}` 
+              : 'Camera is streaming to viewers'}
           </Text>
         </View>
       )}
@@ -374,7 +492,9 @@ function AppContent() {
       {/* Streaming indicator */}
       {isStreaming && (
         <View style={styles.streamingIndicator}>
-          <Text style={styles.streamingText}>LIVE</Text>
+          <Text style={styles.streamingText}>
+            {monitorNumber ? `LIVE - Monitor ${monitorNumber}` : 'LIVE'}
+          </Text>
         </View>
       )}
       
