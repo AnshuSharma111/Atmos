@@ -68,15 +68,17 @@ const PRODUCTION_CONFIG = {
   isDevelopment: false,
   isProduction: true,
   
-  // Socket.IO configuration
+  // Socket.IO configuration - optimized for production (Render wake-up)
   socketConfig: {
-    transports: ['websocket', 'polling'],
+    transports: ['polling', 'websocket'], // Try polling first for better compatibility
     reconnection: true,
-    reconnectionAttempts: 10,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
-    timeout: 20000,
+    reconnectionAttempts: 15, // More attempts for Render wake-up
+    reconnectionDelay: 2000, // 2 seconds between attempts
+    reconnectionDelayMax: 10000, // Max 10 seconds between attempts
+    timeout: 60000, // 60 seconds timeout for Render wake-up
     forceNew: true,
+    upgrade: true, // Allow upgrade from polling to websocket
+    rememberUpgrade: false, // Don't cache the upgrade decision
   },
 };
 

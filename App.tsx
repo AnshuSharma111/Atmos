@@ -150,8 +150,8 @@ function BroadcasterContent() {
       // This prevents "Socket not connected" error during registration
       await new Promise<void>((resolve, reject) => {
         const connectionTimeout = setTimeout(() => {
-          reject(new Error('Socket connection timeout after 20 seconds'));
-        }, 20000);
+          reject(new Error('Socket connection timeout after 60 seconds. Server may be sleeping - try again.'));
+        }, 60000); // 60 seconds for Render wake-up time
         
         // Set up socket event handlers
         socketRef.current.on('connect', () => {
@@ -172,7 +172,15 @@ function BroadcasterContent() {
           
           Alert.alert(
             'Connection Error', 
-            `Cannot connect to streaming server.\n\nServer: ${SIGNALING_SERVER_URL}\n\nError: ${error.message}\n\nPlease check:\n1. Server is running (might be sleeping)\n2. URL is correct\n3. Network connection\n4. Firewall settings`
+            `Cannot connect to streaming server.\n\n` +
+            `Server: ${SIGNALING_SERVER_URL}\n\n` +
+            `Error: ${error.message}\n\n` +
+            `Common issues:\n` +
+            `1. Server is sleeping (wait 60s and retry)\n` +
+            `2. No internet connection\n` +
+            `3. Server URL incorrect\n` +
+            `4. Firewall blocking connection\n\n` +
+            `Tip: If using Render free tier, first visit the URL in a browser to wake it up.`
           );
           reject(error);
         });
