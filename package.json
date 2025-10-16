@@ -9,8 +9,6 @@
     "start": "node server.js",
     "react-native-start": "react-native start",
     "server": "node server.js",
-    "deploy": "vercel deploy --prod",
-    "dev": "vercel dev",
     "build": "node build-script.js",
     "test": "jest"
   },
