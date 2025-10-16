@@ -23,23 +23,19 @@ import {
   registerGlobals,
 } from 'react-native-webrtc';
 import io from 'socket.io-client';
+import AppConfig from './app.config';
 
 // Register WebRTC globals
 registerGlobals();
 
-// PRODUCTION SERVER URL - Deployed on Render.com
-// For local development: Change to 'http://YOUR_COMPUTER_IP:3001'
-// For production: Use your Render backend URL (already configured)
-const SIGNALING_SERVER_URL = 'https://atmos-7hli.onrender.com';
+// Use configuration from app.config.js
+// To switch between local and production, edit app.config.js
+const SIGNALING_SERVER_URL = AppConfig.serverUrl;
+const ICE_SERVERS = AppConfig.iceServers;
 
-// Enhanced ICE servers for better connectivity through firewalls
-const ICE_SERVERS = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'stun:stun2.l.google.com:19302' },
-  { urls: 'stun:stun.ekiga.net' },
-  { urls: 'stun:stun.ideasip.com' },
-];
+console.log('🔧 Using configuration:');
+console.log(`   Environment: ${AppConfig.environment}`);
+console.log(`   Server URL: ${SIGNALING_SERVER_URL}`);
 
 function App() {
   return (
@@ -146,22 +142,11 @@ function BroadcasterContent() {
         socketRef.current = null;
       }
       
-      console.log(`[BROADCASTER] Connecting to signaling server at ${SIGNALING_SERVER_URL}`);
-      console.log(`[BROADCASTER] Transport methods: websocket, polling`);
-      console.log(`[BROADCASTER] Timeout: 20 seconds`);
-      
-      // Connect to signaling server with improved options
-      socketRef.current = io(SIGNALING_SERVER_URL, {
-        transports: ['websocket', 'polling'],
-        reconnection: true,
-        reconnectionAttempts: 10,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        timeout: 20000,
-        forceNew: true, // Force a new connection
-      });
-      
-      // CRITICAL FIX: Wait for socket to connect before proceeding with camera setup
+        console.log(`[BROADCASTER] Connecting to signaling server at ${SIGNALING_SERVER_URL}`);
+        console.log(`[BROADCASTER] Using socket config from app.config.js`);
+        
+        // Connect to signaling server with configuration
+        socketRef.current = io(SIGNALING_SERVER_URL, AppConfig.socketConfig);      // CRITICAL FIX: Wait for socket to connect before proceeding with camera setup
       // This prevents "Socket not connected" error during registration
       await new Promise<void>((resolve, reject) => {
         const connectionTimeout = setTimeout(() => {

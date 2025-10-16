@@ -1,25 +1,47 @@
 # Atmos Monitoring System
 
-Simple WebRTC-based multi-camera monitoring system.
+Simple WebRTC-based multi-camera monitoring system with automatic frame capture dashboard.
 
-## Setup
+## ⚡ Quick Start
 
-1. Install dependencies:
+### Local Development (5 Steps)
+
+1. **Find your local IP:**
+   ```bash
+   # Windows: ipconfig
+   # Mac/Linux: ifconfig | grep inet
    ```
-   npm install express socket.io cors multer
+
+2. **Edit `app.config.js`** (line 19):
+   ```javascript
+   serverUrl: 'http://YOUR_IP:3001', // Replace with your IP
    ```
 
-## Running
-
-1. Start the server:
+3. **Install dependencies:**
+   ```bash
+   npm install
    ```
+
+4. **Start the server:**
+   ```bash
    node server.js
    ```
 
-2. Open the web viewer:
+5. **Open viewer & run mobile app:**
    ```
-   http://localhost:3001/viewer.html
+   Browser: http://localhost:3001/viewer.html
+   Mobile: npx react-native run-android
    ```
+
+📚 **See [QUICK_SETUP.md](QUICK_SETUP.md) for detailed instructions**
+
+## 🌟 Features
+
+- ✅ **Multi-camera support** - Multiple broadcasters simultaneously
+- ✅ **WebRTC streaming** - Real-time low-latency video
+- ✅ **Frame dashboard** - Auto-captures frames from all streams (FIFO queue)
+- ✅ **Easy configuration** - Switch between local/production in one line
+- ✅ **Auto-detection** - Viewer automatically detects environment
 
 ## Deployment
 

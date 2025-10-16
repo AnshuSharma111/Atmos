@@ -3,6 +3,7 @@
  * Supports multiple broadcasters with multiple viewers
  */
 
+const config = require('./config');
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -396,7 +397,7 @@ io.on('connection', (socket) => {
 });
 
 // Start the server
-const PORT = process.env.PORT || 3001;
+const PORT = config.port;
 
 // Detect available network interfaces
 function getNetworkAddresses() {
@@ -421,14 +422,14 @@ function getNetworkAddresses() {
 
 server.listen(PORT, () => {
   const networkAddresses = getNetworkAddresses();
-  const isProduction = process.env.NODE_ENV === 'production';
-  const isRender = process.env.RENDER === 'true' || process.env.RENDER_EXTERNAL_URL;
+  const isProduction = config.isProduction;
+  const isRender = config.isRender;
   
   let addressList = '';
   
   if (isRender) {
     // Running on Render
-    const renderUrl = process.env.RENDER_EXTERNAL_URL || 'https://atmos-7hli.onrender.com';
+    const renderUrl = config.renderUrl;
     addressList = `║   ${renderUrl.padEnd(40)} ║`;
   } else {
     // Local development - show network addresses

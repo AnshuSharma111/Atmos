@@ -233,7 +233,7 @@
       <div class="dashboard-section">
         <div class="dashboard-header">
           <h2 class="dashboard-title">📸 Frame Dashboard</h2>
-          <span class="frame-count" id="frameCount">0 / 7 frames captured</span>
+          <span class="frame-count" id="frameCount">0 / 10 frames captured</span>
         </div>
         <div id="dashboardGrid" class="dashboard-grid">
           <div class="dashboard-empty">
@@ -245,16 +245,27 @@
     </div>
     
     <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <script src="config.js"></script>
     <script>
+      // Use configuration from config.js
+      const CONFIG = window.ATMOS_CONFIG || {
+        getServerUrl: () => 'http://localhost:3001',
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+        dashboard: { maxFrames: 10, captureInterval: 3000, frameQuality: 0.8 },
+        socketConfig: { transports: ['websocket', 'polling'] },
+        debug: false
+      };
+      
       let socket;
       const peerConnections = {}; // Map of broadcasterId -> RTCPeerConnection
       const streamGrid = document.getElementById('streamGrid');
       const connectBtn = document.getElementById('connectBtn');
       const connectionStatus = document.getElementById('connectionStatus');
       
-      // Dashboard frame management
-      const MAX_FRAMES = 7;
-      const CAPTURE_INTERVAL = 3000; // Capture frame every 3 seconds from each stream
+      // Dashboard frame management (from config)
+      const MAX_FRAMES = CONFIG.dashboard.maxFrames;
+      const CAPTURE_INTERVAL = CONFIG.dashboard.captureInterval;
+      const FRAME_QUALITY = CONFIG.dashboard.frameQuality;
       let capturedFrames = []; // Array to store frames (FIFO queue)
       let captureIntervals = {}; // Map of broadcasterId -> interval ID
       const dashboardGrid = document.getElementById('dashboardGrid');
@@ -267,41 +278,13 @@
       function connectToServer() {
         updateStatus('Connecting...');
         
-        // Get hostname and protocol for flexible deployment
-        const hostname = window.location.hostname;
-        const protocol = window.location.protocol;
+        // Use configuration to get server URL
+        const serverUrl = CONFIG.getServerUrl();
         
-        // Determine the server URL based on environment
-        const isGitHubPages = hostname.includes('github.io');
-        const isRenderDirect = hostname.includes('onrender.com');
-        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-        
-        // Configuration for different environments
-        let serverUrl;
-        let socketPath;
-        
-        if (isGitHubPages) {
-          // GitHub Pages deployment - connect to Render backend
-          serverUrl = 'https://atmos-7hli.onrender.com';
-          socketPath = undefined; // Render uses default path
-          console.log('[VIEWER] 🌐 GitHub Pages mode - connecting to Render backend');
-          console.log('[VIEWER] 📍 Viewer: https://anshusharma111.github.io/Atmos/');
-          console.log('[VIEWER] 🔌 Backend: https://atmos-7hli.onrender.com');
-        } else if (isRenderDirect) {
-          // Deployed directly on Render
-          serverUrl = `${protocol}//${hostname}`;
-          socketPath = undefined;
-          console.log('[VIEWER] 🔌 Render direct mode');
-        } else if (isLocalhost) {
-          // Local development
-          serverUrl = `http://${hostname}:3001`;
-          socketPath = undefined;
-          console.log('[VIEWER] 💻 Local development mode');
-        } else {
-          // Fallback - try local network IP
-          serverUrl = `http://${hostname}:3001`;
-          socketPath = undefined;
-          console.log('[VIEWER] ⚠️ Fallback mode - local network');
+        if (CONFIG.debug) {
+          console.log('[VIEWER] 🔌 Connecting to server...');
+          console.log('[VIEWER] � Server URL:', serverUrl);
+          console.log('[VIEWER] 🌍 Environment:', CONFIG.environment);
         }
         
         console.log(`[VIEWER] ✓ Connecting to: ${serverUrl}`);
@@ -311,11 +294,8 @@
           socket.disconnect();
         }
         
-        // Connect to the server with minimal configuration
-        socket = io(serverUrl, {
-          path: socketPath,
-          transports: ['websocket', 'polling']
-        });
+        // Connect to the server with configuration
+        socket = io(serverUrl, CONFIG.socketConfig);
         
         // Set up socket event handlers
         socket.on('connect', () => {
@@ -502,15 +482,9 @@
         console.log(`Setting up peer connection for broadcaster: ${broadcasterId}`);
         
         try {
-          // Create peer connection with STUN servers for NAT traversal
+          // Create peer connection with STUN servers from config
           const pc = new RTCPeerConnection({
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' },
-              { urls: 'stun:stun2.l.google.com:19302' },
-              { urls: 'stun:stun.ekiga.net' },
-              { urls: 'stun:stun.ideasip.com' }
-            ]
+            iceServers: CONFIG.iceServers
           });
         
         peerConnections[broadcasterId] = pc;
@@ -817,8 +791,8 @@
           const ctx = canvas.getContext('2d');
           ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
           
-          // Convert to data URL (base64 image)
-          const frameDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          // Convert to data URL (base64 image) with quality from config
+          const frameDataUrl = canvas.toDataURL('image/jpeg', FRAME_QUALITY);
           
           console.log(`[DASHBOARD] Captured frame from ${broadcasterId}`);
           
