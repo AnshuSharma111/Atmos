@@ -3,6 +3,9 @@
  * Supports multiple broadcasters with a single viewer interface
  */
 
+// Load environment variables from .env file
+require('dotenv').config();
+
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -37,6 +40,9 @@ if (!fs.existsSync(uploadDir)) {
 // Configure CORS
 app.use(cors());
 app.use(express.json());
+
+// Serve static files (important for deployment)
+app.use(express.static(__dirname));
 
 // Configure storage
 const storage = multer.diskStorage({

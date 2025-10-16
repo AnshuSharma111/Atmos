@@ -20,24 +20,40 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
-      - name: Build and deploy
+      - name: Set up static file serving in server.js
         run: |
-          # Create a build directory with necessary files for deployment
-          mkdir -p build
-          cp server.js build/
-          cp viewer.html build/
-          cp index.html build/
-          cp -r uploads build/ || mkdir build/uploads
-          cp package.json build/
-          cp package-lock.json build/
-          
-          # Copy only necessary dependencies
-          cd build
-          npm ci --production
+          # Make sure server.js is configured to serve static files properly
+          if ! grep -q "app.use(express.static(__dirname));" server.js; then
+            # Add static file serving if it doesn't exist yet
+            sed -i '/app.use(express.json());/a app.use(express.static(__dirname));' server.js
+          fi
       
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
+      # Option 1: If GitHub Pages is preferred after all, uncomment and use this section
+      # - name: Create gh-pages branch
+      #   uses: peaceiris/actions-gh-pages@v3
+      #   with:
+      #     github_token: ${{ secrets.GITHUB_TOKEN }}
+      #     publish_dir: ./
+      #     enable_jekyll: false
+      
+      # Option 2: For Railway deployment (recommended for Node.js apps)
+      # Requires RAILWAY_TOKEN secret to be set in repository settings
+      - name: Deploy to Railway
+        uses: bervProject/railway-deploy@main
+        if: ${{ vars.DEPLOY_TO_RAILWAY == 'true' }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         with:
-          folder: build
-          branch: gh-pages
-          clean: true
+          service: "atmos"
+
+      # Option 3: For Render.com deployment (also good for Node.js apps)
+      # Requires RENDER_TOKEN secret to be set in repository settings
+      - name: Deploy to Render
+        if: ${{ vars.DEPLOY_TO_RENDER == 'true' }}
+        env:
+          RENDER_TOKEN: ${{ secrets.RENDER_TOKEN }}
+        run: |
+          curl -X POST \
+          -H "Authorization: Bearer $RENDER_TOKEN" \
+          -H "Content-Type: application/json" \
+          https://api.render.com/v1/services/${{ vars.RENDER_SERVICE_ID }}/deploys

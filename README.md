@@ -23,34 +23,51 @@ Simple WebRTC-based multi-camera monitoring system.
 
 ## Deployment
 
-This project is automatically deployed to GitHub Pages when changes are pushed to the main branch.
+This project is set up for automatic deployment when changes are pushed to the main branch.
+
+### Deployment Options
+
+The project is configured for multiple deployment platforms. Choose one based on your needs:
+
+#### Option 1: Railway.app (Recommended for Node.js)
+
+1. Create an account on [Railway.app](https://railway.app)
+2. Create a new project
+3. Add a GitHub integration to your Railway project
+4. Generate a deployment token
+5. Add the token as a secret in your GitHub repository:
+   - Go to your GitHub repository → Settings → Secrets → New repository secret
+   - Name: `RAILWAY_TOKEN`
+   - Value: [Your Railway Token]
+6. Set a repository variable:
+   - Go to your GitHub repository → Settings → Variables → New repository variable
+   - Name: `DEPLOY_TO_RAILWAY`
+   - Value: `true`
+
+#### Option 2: Render.com
+
+1. Create an account on [Render.com](https://render.com)
+2. Create a new Web Service linked to your GitHub repository
+3. Generate a Render API key
+4. Add the key as a secret in your GitHub repository:
+   - Name: `RENDER_TOKEN`
+   - Value: [Your Render API Key]
+5. Set these repository variables:
+   - `DEPLOY_TO_RENDER`: `true`
+   - `RENDER_SERVICE_ID`: [Your Render Service ID]
 
 ### Manual Deployment
 
-If you need to manually deploy the project:
+To manually deploy the project:
 
-1. Install development dependencies:
-   ```
-   npm install
-   ```
-
-2. Deploy to GitHub Pages:
-   ```
-   npm run deploy
-   ```
-
-### Automatic Deployment
-
-The project uses GitHub Actions for automatic deployment:
-
-1. Push your changes to the main branch
+1. Push your changes to your repository
    ```
    git add .
-   git commit -m "Your message"
-   git push origin main
+   git commit -m "Your changes"
+   git push upstream main
    ```
 
-2. GitHub Actions will automatically build and deploy the project
+2. GitHub Actions will automatically deploy your application to the configured platform
    ```
    http://YOUR_SERVER_IP:3001
    ```
