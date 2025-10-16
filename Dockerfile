@@ -13,9 +13,12 @@ COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
 # Copy server files only (not React Native files)
+COPY config.js ./
 COPY server.js ./
 COPY socket-handlers.js ./
 COPY viewer.html ./
+COPY index.html ./
+COPY public/ ./public/
 
 # Create non-root user
 RUN useradd -m -u 1001 nodeuser && chown -R nodeuser:nodeuser /app
