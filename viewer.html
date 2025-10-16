@@ -137,6 +137,78 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      
+      /* Dashboard Styles */
+      .dashboard-section {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 2px solid #374151;
+      }
+      
+      .dashboard-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+      }
+      
+      .dashboard-title {
+        font-size: 20px;
+        font-weight: 600;
+      }
+      
+      .frame-count {
+        font-size: 14px;
+        color: #9ca3af;
+      }
+      
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 15px;
+      }
+      
+      .frame-card {
+        background: #1e293b;
+        border-radius: 8px;
+        padding: 10px;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .frame-image {
+        width: 100%;
+        height: 150px;
+        object-fit: cover;
+        border-radius: 4px;
+        background: #111827;
+      }
+      
+      .frame-info {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #9ca3af;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .frame-broadcaster {
+        font-weight: 500;
+        color: #4cc9f0;
+      }
+      
+      .frame-timestamp {
+        font-size: 11px;
+      }
+      
+      .dashboard-empty {
+        text-align: center;
+        padding: 40px;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 8px;
+        color: #6b7280;
+      }
     </style>
   </head>
   <body>
@@ -156,6 +228,20 @@
       <div class="status-bar">
         <div id="connectionStatus">Not connected</div>
       </div>
+      
+      <!-- Dashboard Section -->
+      <div class="dashboard-section">
+        <div class="dashboard-header">
+          <h2 class="dashboard-title">📸 Frame Dashboard</h2>
+          <span class="frame-count" id="frameCount">0 / 7 frames captured</span>
+        </div>
+        <div id="dashboardGrid" class="dashboard-grid">
+          <div class="dashboard-empty">
+            <p>No frames captured yet</p>
+            <p style="font-size: 12px; margin-top: 8px;">Frames will be automatically captured from all active streams</p>
+          </div>
+        </div>
+      </div>
     </div>
     
     <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
@@ -165,6 +251,14 @@
       const streamGrid = document.getElementById('streamGrid');
       const connectBtn = document.getElementById('connectBtn');
       const connectionStatus = document.getElementById('connectionStatus');
+      
+      // Dashboard frame management
+      const MAX_FRAMES = 7;
+      const CAPTURE_INTERVAL = 3000; // Capture frame every 3 seconds from each stream
+      let capturedFrames = []; // Array to store frames (FIFO queue)
+      let captureIntervals = {}; // Map of broadcasterId -> interval ID
+      const dashboardGrid = document.getElementById('dashboardGrid');
+      const frameCountElement = document.getElementById('frameCount');
       
       // Set up connect button
       connectBtn.addEventListener('click', connectToServer);
@@ -500,6 +594,9 @@
             videoElement.onplaying = () => {
               console.log(`Video playing: ${broadcasterId}`);
               updateStreamStatus(broadcasterId, 'Connected');
+              
+              // Start capturing frames for dashboard when video starts playing
+              startFrameCapture(broadcasterId);
             };
             
             updateStreamStatus(broadcasterId, 'Connected');
@@ -591,6 +688,9 @@
           cell.remove();
         }
         
+        // Stop frame capture for this broadcaster
+        stopFrameCapture(id);
+        
         // Clean up WebRTC connection
         if (peerConnections[id]) {
           try {
@@ -604,6 +704,11 @@
       
       // Function to clear all streams
       function clearAllStreams() {
+        // Stop all frame captures
+        Object.keys(captureIntervals).forEach(id => {
+          stopFrameCapture(id);
+        });
+        
         // Close all peer connections
         Object.keys(peerConnections).forEach(id => {
           if (peerConnections[id]) {
@@ -691,6 +796,168 @@
           </div>
         `;
       }
+      
+      // === DASHBOARD FRAME CAPTURE FUNCTIONS ===
+      
+      // Function to capture a frame from a video element
+      function captureFrameFromVideo(broadcasterId) {
+        const videoElement = document.getElementById(`video-${broadcasterId}`);
+        
+        if (!videoElement || videoElement.readyState < 2) {
+          console.log(`[DASHBOARD] Cannot capture frame - video not ready for ${broadcasterId}`);
+          return null;
+        }
+        
+        try {
+          // Create a canvas to capture the frame
+          const canvas = document.createElement('canvas');
+          canvas.width = videoElement.videoWidth || 640;
+          canvas.height = videoElement.videoHeight || 480;
+          
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+          
+          // Convert to data URL (base64 image)
+          const frameDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          
+          console.log(`[DASHBOARD] Captured frame from ${broadcasterId}`);
+          
+          return {
+            id: Date.now() + Math.random(), // Unique ID for this frame
+            broadcasterId: broadcasterId,
+            broadcasterName: getBroadcasterName(broadcasterId),
+            timestamp: new Date().toISOString(),
+            dataUrl: frameDataUrl
+          };
+        } catch (err) {
+          console.error(`[DASHBOARD] Error capturing frame from ${broadcasterId}:`, err);
+          return null;
+        }
+      }
+      
+      // Function to get broadcaster name
+      function getBroadcasterName(broadcasterId) {
+        const cell = document.getElementById(`cell-${broadcasterId}`);
+        if (cell) {
+          const nameElement = cell.querySelector('.stream-title span');
+          return nameElement ? nameElement.textContent : broadcasterId;
+        }
+        return broadcasterId;
+      }
+      
+      // Function to add frame to dashboard (FIFO queue)
+      function addFrameToDashboard(frame) {
+        if (!frame) return;
+        
+        // Add frame to the beginning of the array
+        capturedFrames.unshift(frame);
+        
+        // If we exceed max frames, remove the oldest (from the end)
+        if (capturedFrames.length > MAX_FRAMES) {
+          capturedFrames = capturedFrames.slice(0, MAX_FRAMES);
+        }
+        
+        console.log(`[DASHBOARD] Frame added. Total frames: ${capturedFrames.length}`);
+        
+        // Update the dashboard display
+        updateDashboard();
+      }
+      
+      // Function to update the dashboard display
+      function updateDashboard() {
+        // Update frame count
+        frameCountElement.textContent = `${capturedFrames.length} / ${MAX_FRAMES} frames captured`;
+        
+        // Clear dashboard
+        dashboardGrid.innerHTML = '';
+        
+        if (capturedFrames.length === 0) {
+          dashboardGrid.innerHTML = `
+            <div class="dashboard-empty">
+              <p>No frames captured yet</p>
+              <p style="font-size: 12px; margin-top: 8px;">Frames will be automatically captured from all active streams</p>
+            </div>
+          `;
+          return;
+        }
+        
+        // Render all frames
+        capturedFrames.forEach((frame, index) => {
+          const frameCard = document.createElement('div');
+          frameCard.className = 'frame-card';
+          
+          const timeAgo = getTimeAgo(new Date(frame.timestamp));
+          
+          frameCard.innerHTML = `
+            <img src="${frame.dataUrl}" class="frame-image" alt="Captured frame">
+            <div class="frame-info">
+              <div>
+                <div class="frame-broadcaster">${frame.broadcasterName}</div>
+                <div class="frame-timestamp">${timeAgo}</div>
+              </div>
+              <div style="font-size: 10px; color: #6b7280;">#${capturedFrames.length - index}</div>
+            </div>
+          `;
+          
+          dashboardGrid.appendChild(frameCard);
+        });
+      }
+      
+      // Function to get relative time string
+      function getTimeAgo(date) {
+        const seconds = Math.floor((new Date() - date) / 1000);
+        
+        if (seconds < 60) return `${seconds}s ago`;
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        return `${days}d ago`;
+      }
+      
+      // Function to start capturing frames from a broadcaster
+      function startFrameCapture(broadcasterId) {
+        // Don't start if already capturing
+        if (captureIntervals[broadcasterId]) {
+          console.log(`[DASHBOARD] Already capturing from ${broadcasterId}`);
+          return;
+        }
+        
+        console.log(`[DASHBOARD] Starting frame capture for ${broadcasterId}`);
+        
+        // Capture first frame immediately (after a short delay to ensure video is ready)
+        setTimeout(() => {
+          const frame = captureFrameFromVideo(broadcasterId);
+          if (frame) addFrameToDashboard(frame);
+        }, 2000);
+        
+        // Set up interval to capture frames periodically
+        const intervalId = setInterval(() => {
+          const frame = captureFrameFromVideo(broadcasterId);
+          if (frame) {
+            addFrameToDashboard(frame);
+          }
+        }, CAPTURE_INTERVAL);
+        
+        captureIntervals[broadcasterId] = intervalId;
+      }
+      
+      // Function to stop capturing frames from a broadcaster
+      function stopFrameCapture(broadcasterId) {
+        if (captureIntervals[broadcasterId]) {
+          console.log(`[DASHBOARD] Stopping frame capture for ${broadcasterId}`);
+          clearInterval(captureIntervals[broadcasterId]);
+          delete captureIntervals[broadcasterId];
+        }
+      }
+      
+      // Update dashboard timestamps periodically
+      setInterval(() => {
+        if (capturedFrames.length > 0) {
+          updateDashboard();
+        }
+      }, 10000); // Update every 10 seconds to refresh "time ago" text
     </script>
   </body>
 </html>
