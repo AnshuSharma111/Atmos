@@ -832,11 +832,25 @@
         
         updateStatus("Connecting to server...", "connecting");
         
-        // Get the hostname part (without port)
+        // Get the hostname and protocol
         const hostname = window.location.hostname;
+        const protocol = window.location.protocol;
         
-        // Always use port 3001 for consistency - this must match server.js port
-        let serverUrl = `http://${hostname}:3001`;
+        // Determine if we're on a hosting provider
+        const isVercel = hostname.includes('vercel.app');
+        const isRender = hostname.includes('onrender.com');
+        const isHeroku = hostname.includes('herokuapp.com');
+        const isDeployed = isVercel || isRender || isHeroku;
+        
+        // For deployed environments, use the same host without specifying port
+        // For local development, use port 3001
+        let serverUrl;
+        if (isDeployed) {
+          serverUrl = `${protocol}//${hostname}`;
+        } else {
+          serverUrl = `http://${hostname}:3001`;
+        }
+        
         console.log("Connecting to:", serverUrl);
         
         // Close any existing socket connection first
@@ -847,8 +861,10 @@
         
         // Create new socket with improved connection parameters
         socket = io(serverUrl, {
+          // Only use socketio path on Vercel
+          path: isVercel ? '/api/socketio' : undefined,  
           transports: ['websocket', 'polling'], // Try websocket first, fallback to polling
-          timeout: 20000,                      // Increased timeout for slower networks
+          timeout: 30000,                      // Increased timeout for slower networks
           reconnection: true,                  // Enable reconnection
           reconnectionAttempts: 5,             // Reasonable number of retries
           reconnectionDelay: 1000,             // Wait 1 second before first retry
@@ -894,9 +910,12 @@
                 socket.close();
               }
               
+              const isVercelUrl = serverUrl.includes('vercel.app');
+              
               socket = io(serverUrl, {
+                path: isVercelUrl ? '/api/socketio' : undefined,
                 transports: ['websocket', 'polling'], // Try websocket first
-                timeout: 20000,                     // Increased timeout
+                timeout: 30000,                     // Increased timeout
                 reconnection: true,
                 reconnectionAttempts: 5,
                 reconnectionDelay: 1000,
@@ -981,7 +1000,9 @@
               const hostname = window.location.hostname;
               const serverUrl = `http://${hostname}:3001`;
               
+              const isVercelUrl = serverUrl.includes('vercel.app');
               socket = io(serverUrl, {
+                path: isVercelUrl ? '/api/socketio' : undefined,
                 transports: ['websocket'], // Try websocket only as polling is failing
                 timeout: 10000,
                 reconnection: true,
