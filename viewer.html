@@ -863,14 +863,15 @@
         socket = io(serverUrl, {
           // Only use socketio path on Vercel
           path: isVercel ? '/api/socketio' : undefined,  
-          transports: ['websocket', 'polling'], // Try websocket first, fallback to polling
-          timeout: 30000,                      // Increased timeout for slower networks
+          transports: ['polling', 'websocket'], // Try polling first, then websocket as fallback
+          timeout: 60000,                      // Even longer timeout for unreliable networks
           reconnection: true,                  // Enable reconnection
-          reconnectionAttempts: 5,             // Reasonable number of retries
+          reconnectionAttempts: 10,            // More retries
           reconnectionDelay: 1000,             // Wait 1 second before first retry
           reconnectionDelayMax: 5000,          // Maximum delay between retries
           forceNew: true,                      // Force new connection to avoid conflicts
-          autoConnect: true                    // Connect automatically
+          autoConnect: true,                   // Connect automatically
+          secure: protocol === 'https:'        // Use secure connection if on HTTPS
         });
         
         console.log("Attempting direct connection to:", serverUrl);
@@ -911,16 +912,18 @@
               }
               
               const isVercelUrl = serverUrl.includes('vercel.app');
+              const protocol = window.location.protocol;
               
               socket = io(serverUrl, {
                 path: isVercelUrl ? '/api/socketio' : undefined,
-                transports: ['websocket', 'polling'], // Try websocket first
-                timeout: 30000,                     // Increased timeout
+                transports: ['polling', 'websocket'], // Try polling first, then websocket as fallback
+                timeout: 60000,                     // Increased timeout for reliability
                 reconnection: true,
-                reconnectionAttempts: 5,
+                reconnectionAttempts: 10,
                 reconnectionDelay: 1000,
                 forceNew: true,
-                autoConnect: true
+                autoConnect: true,
+                secure: protocol === 'https:'
               });
               
               console.log(`Attempting manual connection to: http://${serverIp}`);
@@ -1001,13 +1004,15 @@
               const serverUrl = `http://${hostname}:3001`;
               
               const isVercelUrl = serverUrl.includes('vercel.app');
+              const protocol = window.location.protocol;
               socket = io(serverUrl, {
                 path: isVercelUrl ? '/api/socketio' : undefined,
-                transports: ['websocket'], // Try websocket only as polling is failing
-                timeout: 10000,
+                transports: ['polling'], // Try polling only since websocket failed
+                timeout: 60000,
                 reconnection: true,
-                reconnectionAttempts: 3,
-                forceNew: true
+                reconnectionAttempts: 5,
+                forceNew: true,
+                secure: protocol === 'https:'
               });
               
               // Set up handlers for the new socket

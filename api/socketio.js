@@ -9,7 +9,7 @@ module.exports = (req, res) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Connection, Upgrade, Sec-WebSocket-Extensions, Sec-WebSocket-Key, Sec-WebSocket-Version');
   
   // Handle preflight OPTIONS request
   if (req.method === 'OPTIONS') {
@@ -25,11 +25,18 @@ module.exports = (req, res) => {
       cors: { 
         origin: '*', 
         methods: ['GET', 'POST'],
-        credentials: true
+        credentials: true,
+        allowedHeaders: ['Content-Type', 'Authorization']
       },
       path: '/api/socketio',
-      transports: ['websocket', 'polling'],
-      pingTimeout: 60000
+      transports: ['polling', 'websocket'], // Try polling first, then websocket
+      pingTimeout: 60000,
+      pingInterval: 25000,
+      upgradeTimeout: 30000,
+      allowUpgrades: true,
+      perMessageDeflate: true,
+      httpCompression: true,
+      connectTimeout: 45000
     });
     
     // Set up socket handlers
