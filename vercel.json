@@ -2,25 +2,31 @@
   "version": 2,
   "builds": [
     { "src": "server.js", "use": "@vercel/node" },
-    { "src": "api/**/*.js", "use": "@vercel/node" },
-    { "src": "*.html", "use": "@vercel/static" },
-    { "src": "public/**", "use": "@vercel/static" }
+    { "src": "api/**/*.js", "use": "@vercel/node" }
   ],
   "routes": [
-    { "src": "/socket.io/(.*)", "dest": "/api/socketio.js" },
     { "src": "/api/socketio", "dest": "/api/socketio.js" },
     { "src": "/api/debug", "dest": "/api/debug.js" },
     { "src": "/api/(.*)", "dest": "/api/$1.js" },
-    { "src": "/viewer", "dest": "/viewer.html" },
-    { "src": "/viewer.html", "dest": "/viewer.html" },
-    { "src": "/index", "dest": "/index.html" },
-    { "src": "/", "dest": "/viewer.html" },
-    { "src": "/(.*)", "dest": "/$1" }
+    { "src": "/viewer.html", "dest": "/public/viewer.html" },
+    { "src": "/viewer", "dest": "/public/viewer.html" },
+    { "src": "/index.html", "dest": "/public/index.html" },
+    { "src": "/", "dest": "/public/viewer.html" }
   ],
   "functions": {
     "api/socketio.js": {
       "memory": 1024,
-      "maxDuration": 10
+      "maxDuration": 30
     }
-  }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type" }
+      ]
+    }
+  ]
 }

@@ -1,59 +1,44 @@
-name: Deploy Atmos
+name: Deploy to GitHub Pages
 
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Set up static file serving in server.js
-        run: |
-          # Make sure server.js is configured to serve static files properly
-          if ! grep -q "app.use(express.static(__dirname));" server.js; then
-            # Add static file serving if it doesn't exist yet
-            sed -i '/app.use(express.json());/a app.use(express.static(__dirname));' server.js
-          fi
-      
-      # Option 1: If GitHub Pages is preferred after all, uncomment and use this section
-      # - name: Create gh-pages branch
-      #   uses: peaceiris/actions-gh-pages@v3
-      #   with:
-      #     github_token: ${{ secrets.GITHUB_TOKEN }}
-      #     publish_dir: ./
-      #     enable_jekyll: false
-      
-      # Option 2: For Railway deployment (recommended for Node.js apps)
-      # Requires RAILWAY_TOKEN secret to be set in repository settings
-      - name: Deploy to Railway
-        uses: bervProject/railway-deploy@main
-        if: ${{ vars.DEPLOY_TO_RAILWAY == 'true' }}
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        with:
-          service: "atmos"
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
 
-      # Option 3: For Render.com deployment (also good for Node.js apps)
-      # Requires RENDER_TOKEN secret to be set in repository settings
-      - name: Deploy to Render
-        if: ${{ vars.DEPLOY_TO_RENDER == 'true' }}
-        env:
-          RENDER_TOKEN: ${{ secrets.RENDER_TOKEN }}
+      - name: Prepare deployment files
         run: |
-          curl -X POST \
-          -H "Authorization: Bearer $RENDER_TOKEN" \
-          -H "Content-Type: application/json" \
-          https://api.render.com/v1/services/${{ vars.RENDER_SERVICE_ID }}/deploys
+          mkdir -p _site
+          cp viewer.html _site/index.html
+          cp -r public/* _site/ 2>/dev/null || true
+          echo "Files prepared for deployment"
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '_site'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
