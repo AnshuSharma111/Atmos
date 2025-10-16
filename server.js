@@ -1,21 +1,15 @@
 /**
- * Atmos Monitoring System - Simple Server
- * Supports multiple broadcasters with a single viewer interface
+ * Atmos - Simple Signaling Server
+ * Supports multiple broadcasters with multiple viewers
  */
 
-// Load environment variables from .env file
-require('dotenv').config();
-
-const fs = require('fs');
-const path = require('path');
 const express = require('express');
-const multer = require('multer');
 const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
-const os = require('os');
+const path = require('path');
 
-// Initialize Express app with minimal setup
+// Initialize Express app
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
@@ -28,125 +22,40 @@ const io = socketIo(server, {
 // Track active broadcasters
 const broadcasters = new Map(); // Map of broadcaster ID -> metadata
 
-// Configure upload directory
-const uploadDir = path.join(__dirname, 'uploads');
-
-// Ensure upload directory exists
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log(`Created upload directory: ${uploadDir}`);
-}
-
 // Configure CORS
 app.use(cors());
 app.use(express.json());
 
-// Serve static files (important for deployment)
+// Serve static files
 app.use(express.static(__dirname));
 
-// Configure storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, file.originalname);
-  }
-});
-
-const upload = multer({ storage });
-
-// Serve the uploads folder
-app.use('/uploads', express.static(uploadDir));
-
-// Endpoint to save frames
-app.post('/api/save-frames', upload.array('frames'), (req, res) => {
-  console.log(`Received ${req.files.length} frames`);
-  
-  const MAX_FILES = 10;
-  
-  // After saving new files, check if we need to delete older ones
-  fs.readdir(uploadDir, (err, files) => {
-    if (err) {
-      console.error('Error reading directory:', err);
-      return res.status(500).json({ error: 'Failed to manage files' });
-    }
-    
-    // Sort files by creation time (oldest first)
-    const sortedFiles = files.map(file => {
-      return {
-        name: file,
-        time: fs.statSync(path.join(uploadDir, file)).birthtime.getTime()
-      };
-    }).sort((a, b) => a.time - b.time);
-    
-    // Delete oldest files if we exceed MAX_FILES
-    if (sortedFiles.length > MAX_FILES) {
-      const filesToDelete = sortedFiles.slice(0, sortedFiles.length - MAX_FILES);
-      filesToDelete.forEach(file => {
-        fs.unlinkSync(path.join(uploadDir, file.name));
-        console.log(`Deleted old file: ${file.name}`);
-      });
-    }
-    
-    res.json({ 
-      success: true, 
-      message: `Saved ${req.files.length} frames`,
-      totalFrames: Math.min(files.length, MAX_FILES)
-    });
+// Basic server info endpoint
+app.get('/api/server-info', (req, res) => {
+  res.json({
+    status: 'online',
+    broadcasters: broadcasters.size,
+    serverTime: new Date().toISOString()
   });
-});
-
-// Endpoint to get all frames
-app.get('/api/frames', (req, res) => {
-  fs.readdir(uploadDir, (err, files) => {
-    if (err) {
-      console.error('Error reading directory:', err);
-      return res.status(500).json({ error: 'Failed to read files' });
-    }
-    
-    // Sort files by creation time (newest first)
-    const sortedFiles = files.map(file => {
-      return {
-        name: file,
-        url: `/uploads/${file}`,
-        time: fs.statSync(path.join(uploadDir, file)).birthtime.getTime()
-      };
-    }).sort((a, b) => b.time - a.time);
-    
-    res.json(sortedFiles);
-  });
-});
-
-// Get active broadcasters
-app.get('/api/broadcasters', (req, res) => {
-  const broadcasterList = Array.from(broadcasters.entries()).map(([id, metadata]) => ({
-    id,
-    name: metadata.name,
-    location: metadata.location,
-    connected: metadata.connected,
-    lastSeen: metadata.lastSeen
-  }));
-  
-  res.json(broadcasterList);
 });
 
 // Socket.io logic for WebRTC signaling
 io.on('connection', (socket) => {
-  console.log('A client connected:', socket.id);
+  console.log('Client connected:', socket.id);
+  
+  // Log connection information
+  const clientInfo = {
+    id: socket.id,
+    address: socket.handshake.address,
+    time: new Date().toISOString(),
+    userAgent: socket.handshake.headers['user-agent'] || 'Unknown'
+  };
+  console.log('Connection details:', JSON.stringify(clientInfo));
   
   // Function to get the next monitor number
   function getNextMonitorNumber() {
-    let usedNumbers = [];
+    const usedNumbers = Array.from(broadcasters.values())
+      .map(b => b.monitorNumber || 0);
     
-    // Get all currently used monitor numbers
-    for (const [id, broadcaster] of broadcasters.entries()) {
-      if (broadcaster.monitorNumber) {
-        usedNumbers.push(broadcaster.monitorNumber);
-      }
-    }
-    
-    // Start from 1 and find the first available number
     let nextNumber = 1;
     while (usedNumbers.includes(nextNumber)) {
       nextNumber++;
@@ -157,378 +66,362 @@ io.on('connection', (socket) => {
   
   // Handle broadcaster registration
   socket.on('register-broadcaster', (metadata = {}) => {
-    console.log(`New broadcaster registered:`, metadata);
-    
     // Use custom ID if provided, otherwise use socket ID
     const broadcasterId = metadata.id || socket.id;
-    socket.broadcasterId = broadcasterId;
-    
-    // Get next monitor number
-    const monitorNumber = getNextMonitorNumber();
-    const monitorName = `Monitor ${monitorNumber}`;
     
     // Store broadcaster information
     broadcasters.set(broadcasterId, {
       id: broadcasterId,
       socketId: socket.id,
-      name: metadata.name || monitorName,
-      monitorNumber: monitorNumber,
-      location: metadata.location || 'Unknown',
-      connected: true,
-      lastSeen: new Date().toISOString()
+      name: metadata.name || `Stream ${getNextMonitorNumber()}`,
+      monitorNumber: getNextMonitorNumber(),
+      connected: true
     });
     
-    // Log all current broadcasters for debugging
-    console.log('Current broadcasters:');
-    broadcasters.forEach((value, key) => {
-      console.log(`- ${key}: ${value.name} (Monitor ${value.monitorNumber})`);
-    });
+    console.log(`Broadcaster registered: ${broadcasterId} (${broadcasters.get(broadcasterId).name})`);
     
     // Notify viewers about new broadcaster
     socket.broadcast.emit('broadcaster-joined', {
       id: broadcasterId,
-      name: monitorName,
-      monitorNumber: monitorNumber,
-      location: broadcasters.get(broadcasterId).location
+      name: broadcasters.get(broadcasterId).name,
+      monitorNumber: broadcasters.get(broadcasterId).monitorNumber
     });
     
-    // Also notify the broadcaster of its monitor number
+    // Notify the broadcaster of its monitor number
     socket.emit('monitor-number', {
       broadcasterId: broadcasterId,
-      number: monitorNumber
+      number: broadcasters.get(broadcasterId).monitorNumber
     });
   });
   
-  // Handle viewer connection
-  socket.on('viewer-connect', () => {
-    console.log('Viewer connected:', socket.id);
+  // Handle broadcaster explicitly unregistering
+  socket.on('unregister-broadcaster', (data) => {
+    const broadcasterId = data.id;
     
-    // Send list of all active broadcasters to new viewer
+    if (broadcasterId && broadcasters.has(broadcasterId)) {
+      console.log(`Broadcaster explicitly unregistered: ${broadcasterId}`);
+      
+      // Remove from the broadcasters list
+      broadcasters.delete(broadcasterId);
+      
+      // Notify all clients that this broadcaster has left
+      socket.broadcast.emit('broadcaster-disconnected', broadcasterId);
+    }
+  });
+  
+  // Handle viewer's request for broadcaster list
+  socket.on('list-broadcasters', () => {
     const activeBroadcasters = Array.from(broadcasters.entries())
       .filter(([_, metadata]) => metadata.connected)
       .map(([id, metadata]) => ({
         id,
-        name: metadata.name || `Monitor ${metadata.monitorNumber}`,
-        monitorNumber: metadata.monitorNumber,
-        location: metadata.location
+        name: metadata.name,
+        monitorNumber: metadata.monitorNumber
       }));
     
     socket.emit('broadcaster-list', activeBroadcasters);
   });
   
-  // Handle list-broadcasters request
-  socket.on('list-broadcasters', () => {
-    console.log('Client requested broadcaster list');
-    
-    // Convert the broadcasters map to an array of active broadcasters
-    const activeBroadcasters = Array.from(broadcasters.entries())
-      .filter(([_, broadcaster]) => broadcaster.connected)
-      .map(([id, broadcaster]) => ({
-        id,
-        name: broadcaster.name || `Monitor ${broadcaster.monitorNumber}`,
-        monitorNumber: broadcaster.monitorNumber,
-        location: broadcaster.location
-      }));
-    
-    socket.emit('broadcaster-list', activeBroadcasters);
-  });
-  
-  // Handle viewer requesting connection to a specific broadcaster
+  // Handle viewer's request to connect to a specific broadcaster
   socket.on('connect-to-broadcaster', (broadcasterId) => {
     console.log(`Viewer ${socket.id} requesting connection to broadcaster ${broadcasterId}`);
     
     if (broadcasters.has(broadcasterId)) {
-      // Forward the connection request to the specific broadcaster
-      socket.to(broadcasterId).emit('viewer-connect-request', socket.id);
+      const broadcaster = broadcasters.get(broadcasterId);
+      
+      // Notify the broadcaster that a viewer wants to connect
+      io.to(broadcaster.socketId).emit('viewer-requested-connection', {
+        viewerId: socket.id
+      });
+      
+      console.log(`Notified broadcaster ${broadcasterId} that viewer ${socket.id} wants to connect`);
     } else {
-      // Broadcaster not found
-      socket.emit('broadcaster-not-found', broadcasterId);
+      console.warn(`Viewer ${socket.id} tried to connect to non-existent broadcaster ${broadcasterId}`);
     }
   });
   
-  // Legacy event - keep for compatibility
-  socket.on('join-stream', () => {
-    console.log('Client joined stream (legacy):', socket.id);
-    // Treat as viewer connect
-    socket.emit('broadcaster-list', Array.from(broadcasters.entries())
-      .filter(([_, metadata]) => metadata.connected)
-      .map(([id, metadata]) => ({
-        id,
-        name: metadata.name,
-        location: metadata.location
-      })));
-  });
-
-  // WebRTC signaling - offer from broadcaster to viewer
-  socket.on('offer', (payload) => {
-    // Extract the SDP and broadcaster ID
-    const sdp = payload.sdp || payload;
-    const broadcasterId = payload.broadcasterId || socket.broadcasterId || socket.id;
-    
-    console.log(`Offer from broadcaster ${broadcasterId}`, JSON.stringify(payload).substring(0, 100) + '...');
-    
-    // Make sure this broadcaster is registered
-    if (!broadcasters.has(broadcasterId)) {
-      console.log(`Warning: Received offer from unregistered broadcaster ${broadcasterId}. Adding to registry.`);
+  // Handle WebRTC signaling: offer
+  socket.on('offer', (data) => {
+    try {
+      console.log('[SERVER] Received offer, full data:', JSON.stringify(data, null, 2));
+      console.log('[SERVER] Offer keys:', Object.keys(data));
+      console.log('[SERVER] broadcasterId:', data.broadcasterId);
+      console.log('[SERVER] targetViewerId:', data.targetViewerId);
       
-      // Auto-register this broadcaster if it's not registered yet
-      // (This can happen if mobile app reloaded but kept same ID)
-      const monitorNumber = getNextMonitorNumber();
-      const monitorName = `Monitor ${monitorNumber}`;
+      // Handle case where broadcasterId might be null
+      let broadcasterId = data.broadcasterId;
       
-      broadcasters.set(broadcasterId, {
-        id: broadcasterId,
-        socketId: socket.id,
-        name: monitorName,
-        monitorNumber: monitorNumber,
-        location: 'Auto-registered',
-        connected: true,
-        lastSeen: new Date().toISOString()
-      });
+      if (!broadcasterId) {
+        console.error('Invalid offer: missing broadcasterId');
+        
+        // Check if this socket is already registered as a broadcaster
+        let existingBroadcaster = null;
+        for (const [id, metadata] of broadcasters.entries()) {
+          if (metadata.socketId === socket.id) {
+            existingBroadcaster = id;
+            break;
+          }
+        }
+        
+        if (existingBroadcaster) {
+          // Use the existing broadcaster ID
+          broadcasterId = existingBroadcaster;
+          console.log(`Using existing broadcaster ID ${broadcasterId} for socket ${socket.id}`);
+        } else {
+          // Try to recover by using socket ID as fallback
+          broadcasterId = socket.id;
+          console.log(`Using socket ID ${socket.id} as fallback broadcasterId`);
+          
+          // Register this socket as a broadcaster with its socket ID
+          broadcasters.set(socket.id, {
+            id: socket.id,
+            socketId: socket.id,
+            name: `Stream ${getNextMonitorNumber()}`,
+            monitorNumber: getNextMonitorNumber(),
+            connected: true,
+            lastActivity: Date.now()
+          });
+        }
+      }
       
-      // Notify broadcaster of its monitor number
-      socket.emit('monitor-number', {
-        broadcasterId: broadcasterId,
-        number: monitorNumber
-      });
+      console.log(`Processing offer from broadcaster: ${broadcasterId}`);
       
-      // Notify viewers about new broadcaster
-      socket.broadcast.emit('broadcaster-joined', {
-        id: broadcasterId,
-        name: monitorName,
-        monitorNumber: monitorNumber,
-        location: 'Auto-registered'
-      });
-    }
-    
-    if (payload.target) {
-      // Direct offer to specific viewer
-      console.log(`Sending direct offer to viewer ${payload.target}`);
-      io.to(payload.target).emit('offer', {
-        sdp: sdp,
-        broadcasterId: broadcasterId
-      });
-    } else {
-      // Broadcast to all viewers
-      console.log(`Broadcasting offer to all viewers`);
-      socket.broadcast.emit('offer', {
-        sdp: sdp,
-        broadcasterId: broadcasterId
-      });
-    }
-  });
-
-  // WebRTC signaling - answer from viewer to broadcaster
-  socket.on('answer', (payload) => {
-    // Extract the answer and target broadcaster ID
-    const answer = payload.sdp || payload.answer || payload;
-    const targetBroadcasterId = payload.targetBroadcasterId || payload.target;
-    
-    console.log(`Answer from viewer ${socket.id} to broadcaster ${targetBroadcasterId}`, 
-      JSON.stringify(answer).substring(0, 100) + '...');
-    
-    if (targetBroadcasterId && broadcasters.has(targetBroadcasterId)) {
-      // Get the socket ID for this broadcaster
-      const broadcasterSocketId = broadcasters.get(targetBroadcasterId).socketId;
+      // Update broadcaster's last activity time
+      if (broadcasters.has(broadcasterId)) {
+        const broadcaster = broadcasters.get(broadcasterId);
+        broadcaster.lastActivity = Date.now();
+        broadcasters.set(broadcasterId, broadcaster);
+      } else {
+        console.warn(`Offer from unregistered broadcaster: ${broadcasterId}, registering now`);
+        // Auto-register this broadcaster
+        broadcasters.set(broadcasterId, {
+          id: broadcasterId,
+          socketId: socket.id,
+          name: `Stream ${getNextMonitorNumber()}`,
+          monitorNumber: getNextMonitorNumber(),
+          connected: true,
+          lastActivity: Date.now()
+        });
+      }
       
-      // Make sure we have a properly formatted SDP answer
-      const properAnswer = {
-        type: 'answer',
-        sdp: answer.sdp || answer
-      };
+      // Validate SDP before broadcasting
+      if (!data.sdp) {
+        console.error('Invalid offer: missing or invalid SDP');
+        return;
+      }
       
-      console.log(`Sending formatted answer to broadcaster ${targetBroadcasterId}`);
+      // Ensure we always have a valid SDP object with type to broadcast
+      let sdpToSend = data.sdp;
+      if (typeof sdpToSend === 'object' && !sdpToSend.type) {
+        sdpToSend.type = 'offer';
+      }
       
-      // Send answer to the specific broadcaster
-      io.to(broadcasterSocketId).emit('answer', {
-        sdp: properAnswer,
-        viewer: socket.id
-      });
-    } else {
-      console.log('No target broadcaster found for answer, broadcasting to all');
-      // Fallback to legacy behavior
-      socket.broadcast.emit('answer', {
-        type: 'answer',
-        sdp: answer.sdp || answer
-      });
+      // Check if this offer is targeted to a specific viewer
+      if (data.targetViewerId) {
+        // Send offer to specific viewer only
+        console.log(`[SERVER] Sending offer from ${broadcasterId} to specific viewer ${data.targetViewerId}`);
+        io.to(data.targetViewerId).emit('offer', {
+          sdp: sdpToSend,
+          broadcasterId: broadcasterId
+        });
+        
+        console.log(`[SERVER] ✓ Sent targeted offer from: ${broadcasterId} to viewer: ${data.targetViewerId}`);
+      } else {
+        // No target viewer ID - this shouldn't happen with the new architecture
+        console.error(`[SERVER] ❌ REJECTED: Offer from ${broadcasterId} has no targetViewerId!`);
+        console.error(`[SERVER] This means the broadcaster app is running OLD CODE.`);
+        console.error(`[SERVER] Please rebuild and reinstall the mobile app!`);
+        console.error(`[SERVER] Expected offer format: {sdp, broadcasterId, targetViewerId}`);
+        console.error(`[SERVER] Received keys:`, Object.keys(data));
+      }
+      
+      socket.emit('offer-received', { broadcasterId: broadcasterId });
+    } catch (error) {
+      console.error('Error handling offer:', error);
+      console.error('Error details:', error.stack);
     }
   });
-
-  // WebRTC signaling - ICE candidates
-  socket.on('ice-candidate', (payload) => {
-    // Log the received ICE candidate format for debugging
-    console.log('ICE candidate payload received:', JSON.stringify(payload).substring(0, 100) + '...');
-    
-    // Extract candidate information
-    const candidate = payload.candidate || payload;
-    const targetBroadcasterId = payload.targetBroadcasterId || payload.target;
-    const senderBroadcasterId = payload.broadcasterId || socket.broadcasterId;
-    
-    // Ensure the candidate has the required properties
-    const validCandidate = {
-      candidate: candidate.candidate || candidate,
-      sdpMLineIndex: candidate.sdpMLineIndex !== undefined ? candidate.sdpMLineIndex : 0,
-      sdpMid: candidate.sdpMid || '0',
-      usernameFragment: candidate.usernameFragment
-    };
-    
-    if (targetBroadcasterId && broadcasters.has(targetBroadcasterId)) {
-      // Viewer sending ICE candidate to specific broadcaster
-      console.log(`ICE candidate from viewer ${socket.id} to broadcaster ${targetBroadcasterId}`);
+  
+  // Handle WebRTC signaling: answer
+  socket.on('answer', (data) => {
+    try {
+      const targetBroadcasterId = data.targetBroadcasterId;
       
-      // Get socket ID for this broadcaster
-      const broadcasterSocketId = broadcasters.get(targetBroadcasterId).socketId;
+      if (!targetBroadcasterId) {
+        console.error('Invalid answer: missing targetBroadcasterId', data);
+        return;
+      }
       
-      io.to(broadcasterSocketId).emit('ice-candidate', {
-        candidate: validCandidate,
-        sender: socket.id
+      if (!broadcasters.has(targetBroadcasterId)) {
+        console.warn(`Answer for unknown broadcaster: ${targetBroadcasterId}`);
+        return;
+      }
+      
+      const broadcaster = broadcasters.get(targetBroadcasterId);
+      
+      console.log(`Sending answer from ${socket.id} to broadcaster ${targetBroadcasterId}`);
+      
+      io.to(broadcaster.socketId).emit('answer', {
+        sdp: data.sdp,
+        viewerId: socket.id
       });
-    } else if (senderBroadcasterId) {
-      // Broadcaster sending ICE candidate to all viewers
-      console.log(`ICE candidate from broadcaster ${senderBroadcasterId} to viewers`);
-      
-      socket.broadcast.emit('ice-candidate', {
-        candidate: validCandidate,
-        broadcasterId: senderBroadcasterId
-      });
-    } else {
-      // Legacy behavior
-      console.log('Received ICE candidate (legacy format)');
-      socket.broadcast.emit('ice-candidate', validCandidate);
+    } catch (error) {
+      console.error('Error handling answer:', error);
     }
   });
-
-  // Handle disconnect
+  
+  // Handle WebRTC signaling: ICE candidates
+  socket.on('ice-candidate', (data) => {
+    try {
+      const targetBroadcasterId = data.targetBroadcasterId;
+      const broadcasterId = data.broadcasterId;
+      const targetViewerId = data.targetViewerId;
+      
+      if (targetViewerId) {
+        // Broadcaster sending ICE candidate to a specific viewer
+        console.log(`Forwarding ICE candidate from broadcaster ${broadcasterId || socket.id} to viewer ${targetViewerId}`);
+        
+        io.to(targetViewerId).emit('ice-candidate', {
+          candidate: data.candidate,
+          broadcasterId: broadcasterId || socket.id
+        });
+      } else if (targetBroadcasterId && broadcasters.has(targetBroadcasterId)) {
+        // This is a viewer sending ICE candidate to a broadcaster
+        const broadcaster = broadcasters.get(targetBroadcasterId);
+        console.log(`Forwarding ICE candidate from viewer ${socket.id} to broadcaster ${targetBroadcasterId}`);
+        
+        io.to(broadcaster.socketId).emit('ice-candidate', {
+          candidate: data.candidate,
+          viewerId: socket.id
+        });
+      } else {
+        // Legacy: From broadcaster to all viewers (shouldn't happen with new code)
+        console.log(`Broadcasting ICE candidate from broadcaster ${broadcasterId || socket.id} to all viewers (legacy)`);
+        
+        socket.broadcast.emit('ice-candidate', {
+          candidate: data.candidate,
+          broadcasterId: data.broadcasterId || socket.id
+        });
+      }
+    } catch (error) {
+      console.error('Error handling ICE candidate:', error);
+    }
+  });
+  
+  // Handle camera switch request from viewer
+  socket.on('switch-camera', (data) => {
+    try {
+      const { broadcasterId } = data;
+      
+      if (!broadcasterId) {
+        console.error('[SERVER] Camera switch request missing broadcasterId');
+        return;
+      }
+      
+      if (!broadcasters.has(broadcasterId)) {
+        console.warn(`[SERVER] Camera switch request for unknown broadcaster: ${broadcasterId}`);
+        return;
+      }
+      
+      const broadcaster = broadcasters.get(broadcasterId);
+      console.log(`[SERVER] Forwarding camera switch request from viewer ${socket.id} to broadcaster ${broadcasterId}`);
+      
+      // Forward the request to the broadcaster
+      io.to(broadcaster.socketId).emit('switch-camera-request', {
+        viewerId: socket.id
+      });
+      
+      console.log(`[SERVER] ✓ Camera switch request sent to broadcaster ${broadcasterId}`);
+    } catch (error) {
+      console.error('[SERVER] Error handling camera switch request:', error);
+    }
+  });
+  
+  // Handle disconnections
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
     
-    // Check if this was a broadcaster by looking at custom ID
-    if (socket.broadcasterId && broadcasters.has(socket.broadcasterId)) {
-      const broadcasterId = socket.broadcasterId;
-      broadcasters.get(broadcasterId).connected = false;
-      broadcasters.get(broadcasterId).lastSeen = new Date().toISOString();
-      
-      // Notify viewers that this specific broadcaster disconnected
-      socket.broadcast.emit('broadcaster-disconnected', broadcasterId);
-      
-      console.log(`Broadcaster ${broadcasterId} disconnected`);
-      
-      // Optional: Remove broadcaster after some time
-      setTimeout(() => {
-        if (broadcasters.has(broadcasterId) && !broadcasters.get(broadcasterId).connected) {
-          broadcasters.delete(broadcasterId);
-          console.log(`Removed inactive broadcaster: ${broadcasterId}`);
-        }
-      }, 60 * 60 * 1000); // Remove after 1 hour of inactivity
-    } else {
-      // Check if this was a broadcaster by socket ID (legacy)
-      let wasBroadcaster = false;
-      for (const [id, broadcaster] of broadcasters.entries()) {
-        if (broadcaster.socketId === socket.id) {
-          broadcaster.connected = false;
-          broadcaster.lastSeen = new Date().toISOString();
-          
-          // Notify viewers that this broadcaster disconnected
-          socket.broadcast.emit('broadcaster-disconnected', id);
-          
-          console.log(`Broadcaster ${id} disconnected (by socket ID)`);
-          wasBroadcaster = true;
-          break;
-        }
+    // Track all broadcaster IDs that belong to this socket
+    const disconnectedBroadcasters = [];
+    
+    // Check if this was a broadcaster - find ALL entries with this socket ID
+    for (const [id, metadata] of broadcasters.entries()) {
+      if (metadata.socketId === socket.id) {
+        disconnectedBroadcasters.push({ id, name: metadata.name });
+        // Remove the broadcaster
+        broadcasters.delete(id);
       }
+    }
+    
+    // Log and notify if any broadcasters were removed
+    if (disconnectedBroadcasters.length > 0) {
+      disconnectedBroadcasters.forEach(broadcaster => {
+        console.log(`Broadcaster disconnected: ${broadcaster.id} (${broadcaster.name || 'unnamed'})`);
+        // Notify all clients
+        io.emit('broadcaster-disconnected', broadcaster.id);
+      });
       
-      if (!wasBroadcaster) {
-        // Was just a viewer, no special handling needed
-        console.log('Viewer disconnected:', socket.id);
+      // Log active broadcasters after removal
+      console.log(`Active broadcasters remaining: ${broadcasters.size}`);
+      if (broadcasters.size > 0) {
+        console.log('Remaining broadcasters:');
+        for (const [bid, data] of broadcasters.entries()) {
+          console.log(`- ${bid} (${data.name || 'unnamed'})`);
+        }
       }
     }
   });
 });
 
-// Serve viewer.html at the root route
-app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/viewer.html');
-});
-
-// Add a status route to check server status
-app.get('/status', (req, res) => {
-  const status = {
-    server: 'running',
-    activeConnections: io.engine.clientsCount,
-    broadcasters: Array.from(broadcasters.entries())
-      .filter(([_, metadata]) => metadata.connected)
-      .map(([id, metadata]) => ({
-        id,
-        name: metadata.name,
-        monitorNumber: metadata.monitorNumber,
-        lastSeen: metadata.lastSeen
-      }))
-  };
-  
-  res.json(status);
-});
-
-// Serve the HTML files directly
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'viewer.html'));
-});
-
-app.get('/index', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.get('/index.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.get('/viewer', (req, res) => {
-  res.sendFile(path.join(__dirname, 'viewer.html'));
-});
-
-app.get('/viewer.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'viewer.html'));
-});
-
 // Start the server
-const PORT = process.env.PORT || 3001; // Changed to port 3001 to avoid conflicts
-// Listen on all available network interfaces (0.0.0.0)
-server.listen(PORT, '0.0.0.0', () => {
-  // Get all possible network interfaces
-  const networkInterfaces = os.networkInterfaces();
-  const ipAddresses = [];
+const PORT = process.env.PORT || 3001;
 
-  // Extract all available IP addresses
-  Object.keys(networkInterfaces).forEach(interfaceName => {
-    const interfaces = networkInterfaces[interfaceName];
-    interfaces.forEach(iface => {
-      // Skip internal/non-IPv4 addresses
-      if (iface.family === 'IPv4' && !iface.internal) {
-        ipAddresses.push(iface.address);
+// Detect available network interfaces
+function getNetworkAddresses() {
+  const { networkInterfaces } = require('os');
+  const nets = networkInterfaces();
+  const results = {};
+
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+      if (net.family === 'IPv4' && !net.internal) {
+        if (!results[name]) {
+          results[name] = [];
+        }
+        results[name].push(net.address);
       }
-    });
-  });
+    }
+  }
 
-  const primaryIp = ipAddresses[0] || 'localhost';
+  return results;
+}
+
+server.listen(PORT, () => {
+  const networkAddresses = getNetworkAddresses();
+  let addressList = '';
   
-  console.log(`\n🚀 Atmos Monitoring System Server`);
-  console.log(`==================================`);
-  console.log(`✅ Server running on port ${PORT}`);
-  
-  // If multiple IPs found, list all of them
-  if (ipAddresses.length > 0) {
-    console.log(`\nAvailable IP Addresses to connect from mobile app:`);
-    ipAddresses.forEach((ip, index) => {
-      console.log(`${index + 1}. http://${ip}:${PORT}`);
+  for (const [iface, addresses] of Object.entries(networkAddresses)) {
+    addresses.forEach(addr => {
+      addressList += `║   http://${addr}:${PORT}              ║\n`;
     });
-    console.log(`\n🔒 Use one of these IP addresses in your App.tsx SIGNALING_SERVER_URL!`);
-  } else {
-    console.log(`📱 Mobile app should connect to: http://${primaryIp}:${PORT}`);
   }
   
-  console.log(`\n🌐 Web viewer available at: http://${primaryIp}:${PORT}`);
-  console.log(`🔍 Status endpoint: http://${primaryIp}:${PORT}/status`);
-  console.log(`📸 Frame upload API: http://${primaryIp}:${PORT}/api/save-frames`);
-  console.log(`📋 Frame listing API: http://${primaryIp}:${PORT}/api/frames`);
-  console.log(`📡 WebRTC signaling active (multi-broadcaster mode)`);
-  console.log(`==================================\n`);
+  // Trim trailing whitespace from address list
+  addressList = addressList.trim();
+  
+  console.log(`
+╔══════════════════════════════════════════╗
+║                                          ║
+║   Atmos Streaming Server                 ║
+║   Running on port ${PORT}                  ║
+║                                          ║
+║   Available at:                          ║
+${addressList}
+║                                          ║
+╚══════════════════════════════════════════╝
+  `);
+  
+  console.log(`WebRTC signaling server started on port ${PORT}`);
+  console.log(`Access the viewer at: http://localhost:${PORT}/viewer.html`);
 });
