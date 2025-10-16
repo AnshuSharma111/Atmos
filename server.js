@@ -470,6 +470,14 @@ app.get('/status', (req, res) => {
 
 // Serve the HTML files directly
 app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'viewer.html'));
+});
+
+app.get('/index', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/index.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 

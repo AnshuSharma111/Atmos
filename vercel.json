@@ -8,7 +8,9 @@
     { "src": "/api/(.*)", "dest": "/server.js" },
     { "src": "/socket.io/(.*)", "dest": "/server.js" },
     { "src": "/viewer", "dest": "/viewer.html" },
-    { "src": "/", "dest": "/index.html" },
+    { "src": "/viewer.html", "dest": "/viewer.html" },
+    { "src": "/index", "dest": "/index.html" },
+    { "src": "/", "dest": "/viewer.html" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }
