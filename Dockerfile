@@ -9,8 +9,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies (production only)
-RUN npm ci --only=production && npm cache clean --force
+# Install only server dependencies (skip optional dependencies that may fail)
+RUN npm install --omit=dev --omit=optional --legacy-peer-deps && npm cache clean --force
 
 # Copy server files only (not React Native files)
 COPY config.js ./
