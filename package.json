@@ -10,6 +10,7 @@
     "react-native-start": "react-native start",
     "server": "node server.js",
     "build": "node build-script.js",
+    "deploy": "gh-pages -d public",
     "test": "jest"
   },
   "dependencies": {

@@ -39,7 +39,8 @@ jobs:
         run: |
           mkdir -p _site
           cp viewer.html _site/index.html
-          echo "Viewer page prepared for deployment"
+          cp public/config.js _site/config.js
+          echo "Viewer page and config prepared for deployment"
         
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
