@@ -15,8 +15,6 @@ RUN npm ci --only=production && npm cache clean --force
 # Copy server files only (not React Native files)
 COPY server.js ./
 COPY socket-handlers.js ./
-COPY api/ ./api/
-COPY public/ ./public/
 COPY viewer.html ./
 
 # Create non-root user
