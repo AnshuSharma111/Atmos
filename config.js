@@ -3,9 +3,25 @@
  * Loads environment variables and provides configuration for the application
  */
 
-require('dotenv').config({
-  path: process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local'
-});
+const path = require('path');
+const fs = require('fs');
+
+// Only load dotenv if .env files exist (for local development)
+// On deployment platforms like Render, environment variables are set in the dashboard
+if (process.env.NODE_ENV === 'production') {
+  const prodEnvPath = path.join(__dirname, '.env.production');
+  if (fs.existsSync(prodEnvPath)) {
+    require('dotenv').config({ path: prodEnvPath });
+  }
+  // Otherwise, use environment variables from hosting platform
+} else {
+  const localEnvPath = path.join(__dirname, '.env.local');
+  if (fs.existsSync(localEnvPath)) {
+    require('dotenv').config({ path: localEnvPath });
+  } else {
+    require('dotenv').config(); // Fallback to .env
+  }
+}
 
 const config = {
   // Server Configuration
