@@ -18,6 +18,40 @@ Simple WebRTC-based multi-camera monitoring system.
 
 2. Open the web viewer:
    ```
+   http://localhost:3001/viewer.html
+   ```
+
+## Deployment
+
+This project is automatically deployed to GitHub Pages when changes are pushed to the main branch.
+
+### Manual Deployment
+
+If you need to manually deploy the project:
+
+1. Install development dependencies:
+   ```
+   npm install
+   ```
+
+2. Deploy to GitHub Pages:
+   ```
+   npm run deploy
+   ```
+
+### Automatic Deployment
+
+The project uses GitHub Actions for automatic deployment:
+
+1. Push your changes to the main branch
+   ```
+   git add .
+   git commit -m "Your message"
+   git push origin main
+   ```
+
+2. GitHub Actions will automatically build and deploy the project
+   ```
    http://YOUR_SERVER_IP:3001
    ```
 
