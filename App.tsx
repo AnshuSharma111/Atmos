@@ -30,7 +30,7 @@ registerGlobals();
 // Define server URL that will work for both devices on the same network
 // NOTE: The IP address should match your development machine's network IP
 // If using on a physical device, make sure the IP is reachable from the device's network
-const SIGNALING_SERVER_URL = 'http://192.168.220.54:3001'; // Change this to your computer's IP address
+const SIGNALING_SERVER_URL = 'https://atmos-7hli.onrender.com'; // Change this to your computer's IP address
 // Enhanced ICE servers for better connectivity through firewalls
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },

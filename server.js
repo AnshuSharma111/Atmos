@@ -38,6 +38,28 @@ app.get('/api/server-info', (req, res) => {
   });
 });
 
+// Debug endpoint
+app.get('/api/debug', (req, res) => {
+  const activeBroadcasters = Array.from(broadcasters.entries()).map(([id, metadata]) => ({
+    id,
+    name: metadata.name,
+    monitorNumber: metadata.monitorNumber,
+    connected: metadata.connected
+  }));
+
+  res.json({
+    status: 'online',
+    server: 'Atmos WebRTC Signaling Server',
+    broadcasters: {
+      count: broadcasters.size,
+      active: activeBroadcasters
+    },
+    serverTime: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // Socket.io logic for WebRTC signaling
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
