@@ -180,8 +180,6 @@
         // Determine the server URL based on environment
         const isGitHubPages = hostname.includes('github.io');
         const isRenderDirect = hostname.includes('onrender.com');
-        const isVercel = hostname.includes('vercel.app');
-        const isHeroku = hostname.includes('herokuapp.com');
         const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
         
         // Configuration for different environments
@@ -192,35 +190,27 @@
           // GitHub Pages deployment - connect to Render backend
           serverUrl = 'https://atmos-7hli.onrender.com';
           socketPath = undefined; // Render uses default path
-          console.log('[VIEWER] GitHub Pages mode - connecting to Render backend');
+          console.log('[VIEWER] 🌐 GitHub Pages mode - connecting to Render backend');
+          console.log('[VIEWER] 📍 Viewer: https://anshusharma111.github.io/Atmos/');
+          console.log('[VIEWER] 🔌 Backend: https://atmos-7hli.onrender.com');
         } else if (isRenderDirect) {
           // Deployed directly on Render
           serverUrl = `${protocol}//${hostname}`;
           socketPath = undefined;
-          console.log('[VIEWER] Render direct mode');
-        } else if (isVercel) {
-          // Vercel deployment
-          serverUrl = `${protocol}//${hostname}`;
-          socketPath = '/api/socketio';
-          console.log('[VIEWER] Vercel mode');
-        } else if (isHeroku) {
-          // Heroku deployment
-          serverUrl = `${protocol}//${hostname}`;
-          socketPath = undefined;
-          console.log('[VIEWER] Heroku mode');
+          console.log('[VIEWER] 🔌 Render direct mode');
         } else if (isLocalhost) {
           // Local development
           serverUrl = `http://${hostname}:3001`;
           socketPath = undefined;
-          console.log('[VIEWER] Local development mode');
+          console.log('[VIEWER] 💻 Local development mode');
         } else {
           // Fallback - try local network IP
           serverUrl = `http://${hostname}:3001`;
           socketPath = undefined;
-          console.log('[VIEWER] Fallback mode');
+          console.log('[VIEWER] ⚠️ Fallback mode - local network');
         }
         
-        console.log(`[VIEWER] Connecting to: ${serverUrl}`);
+        console.log(`[VIEWER] ✓ Connecting to: ${serverUrl}`);
         
         // Close any existing connection
         if (socket) {

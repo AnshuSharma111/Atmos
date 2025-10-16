@@ -27,10 +27,11 @@ import io from 'socket.io-client';
 // Register WebRTC globals
 registerGlobals();
 
-// Define server URL that will work for both devices on the same network
-// NOTE: The IP address should match your development machine's network IP
-// If using on a physical device, make sure the IP is reachable from the device's network
-const SIGNALING_SERVER_URL = 'https://atmos-7hli.onrender.com'; // Change this to your computer's IP address
+// PRODUCTION SERVER URL - Deployed on Render.com
+// For local development: Change to 'http://YOUR_COMPUTER_IP:3001'
+// For production: Use your Render backend URL (already configured)
+const SIGNALING_SERVER_URL = 'https://atmos-7hli.onrender.com';
+
 // Enhanced ICE servers for better connectivity through firewalls
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },

@@ -421,22 +421,30 @@ function getNetworkAddresses() {
 
 server.listen(PORT, () => {
   const networkAddresses = getNetworkAddresses();
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isRender = process.env.RENDER === 'true' || process.env.RENDER_EXTERNAL_URL;
+  
   let addressList = '';
   
-  for (const [iface, addresses] of Object.entries(networkAddresses)) {
-    addresses.forEach(addr => {
-      addressList += `║   http://${addr}:${PORT}              ║\n`;
-    });
+  if (isRender) {
+    // Running on Render
+    const renderUrl = process.env.RENDER_EXTERNAL_URL || 'https://atmos-7hli.onrender.com';
+    addressList = `║   ${renderUrl.padEnd(40)} ║`;
+  } else {
+    // Local development - show network addresses
+    for (const [iface, addresses] of Object.entries(networkAddresses)) {
+      addresses.forEach(addr => {
+        addressList += `║   http://${addr}:${PORT}              ║\n`;
+      });
+    }
+    addressList = addressList.trim();
   }
-  
-  // Trim trailing whitespace from address list
-  addressList = addressList.trim();
   
   console.log(`
 ╔══════════════════════════════════════════╗
 ║                                          ║
 ║   Atmos Streaming Server                 ║
-║   Running on port ${PORT}                  ║
+║   Running on port ${PORT}${isProduction ? ' (Production)' : '          '}          ║
 ║                                          ║
 ║   Available at:                          ║
 ${addressList}
@@ -444,6 +452,15 @@ ${addressList}
 ╚══════════════════════════════════════════╝
   `);
   
-  console.log(`WebRTC signaling server started on port ${PORT}`);
-  console.log(`Access the viewer at: http://localhost:${PORT}/viewer.html`);
+  if (isRender) {
+    console.log(`WebRTC signaling server started on Render (port ${PORT})`);
+    console.log(`📱 Mobile app should connect to: https://atmos-7hli.onrender.com`);
+    console.log(`🌐 Viewer available at:`);
+    console.log(`   - GitHub Pages: https://anshusharma111.github.io/Atmos/`);
+    console.log(`   - Direct: https://atmos-7hli.onrender.com/viewer.html`);
+    console.log(`🔍 Debug endpoint: https://atmos-7hli.onrender.com/api/debug`);
+  } else {
+    console.log(`WebRTC signaling server started on port ${PORT}`);
+    console.log(`Access the viewer at: http://localhost:${PORT}/viewer.html`);
+  }
 });
