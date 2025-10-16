@@ -9,7 +9,9 @@
     "start": "node server.js",
     "react-native-start": "react-native start",
     "server": "node server.js",
-    "deploy": "gh-pages -d .",
+    "deploy": "vercel deploy --prod",
+    "dev": "vercel dev",
+    "build": "mkdir -p public && cp -r *.html public/ || true",
     "test": "jest"
   },
   "dependencies": {
