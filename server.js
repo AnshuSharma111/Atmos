@@ -468,6 +468,19 @@ app.get('/status', (req, res) => {
   res.json(status);
 });
 
+// Serve the HTML files directly
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/viewer', (req, res) => {
+  res.sendFile(path.join(__dirname, 'viewer.html'));
+});
+
+app.get('/viewer.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'viewer.html'));
+});
+
 // Start the server
 const PORT = process.env.PORT || 3001; // Changed to port 3001 to avoid conflicts
 // Listen on all available network interfaces (0.0.0.0)

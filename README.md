@@ -29,32 +29,57 @@ This project is set up for automatic deployment when changes are pushed to the m
 
 The project is configured for multiple deployment platforms. Choose one based on your needs:
 
-#### Option 1: Railway.app (Recommended for Node.js)
+#### Option 1: Deploy to Render.com (Recommended)
 
-1. Create an account on [Railway.app](https://railway.app)
-2. Create a new project
-3. Add a GitHub integration to your Railway project
-4. Generate a deployment token
-5. Add the token as a secret in your GitHub repository:
-   - Go to your GitHub repository → Settings → Secrets → New repository secret
-   - Name: `RAILWAY_TOKEN`
-   - Value: [Your Railway Token]
-6. Set a repository variable:
-   - Go to your GitHub repository → Settings → Variables → New repository variable
-   - Name: `DEPLOY_TO_RAILWAY`
-   - Value: `true`
+Render.com is the easiest platform for deploying Node.js applications with WebSockets:
 
-#### Option 2: Render.com
+1. Create an account at [Render.com](https://render.com)
+2. Create a new Web Service and connect to your GitHub repository
+3. Use these settings:
+   - **Environment**: Node
+   - **Build Command**: `npm install`
+   - **Start Command**: `node server.js`
+4. Add these environment variables:
+   - `NODE_ENV`: production
+   - `PORT`: 10000 (Render will use its own PORT internally)
 
-1. Create an account on [Render.com](https://render.com)
-2. Create a new Web Service linked to your GitHub repository
-3. Generate a Render API key
-4. Add the key as a secret in your GitHub repository:
-   - Name: `RENDER_TOKEN`
-   - Value: [Your Render API Key]
-5. Set these repository variables:
-   - `DEPLOY_TO_RENDER`: `true`
-   - `RENDER_SERVICE_ID`: [Your Render Service ID]
+To set up automatic deployments with GitHub Actions:
+1. Get a Render API token from the dashboard
+2. Add these secrets to your GitHub repository:
+   - `RENDER_TOKEN`: Your Render API token
+   - `RENDER_SERVICE_ID`: Your Render service ID
+
+#### Option 2: Deploy to Heroku
+
+Heroku is well-suited for Node.js applications with WebSockets:
+
+1. Create an account at [Heroku](https://heroku.com)
+2. Create a new app
+3. Get your Heroku API key from Account Settings
+4. Add these secrets to your GitHub repository:
+   - `HEROKU_API_KEY`: Your Heroku API key
+   - `HEROKU_APP_NAME`: Your Heroku app name
+
+#### Option 3: Deploy Locally with Docker
+
+You can run the application in a Docker container:
+
+```sh
+# Build the Docker image
+docker build -t atmos-app .
+
+# Run the container
+docker run -p 3001:3000 atmos-app
+```
+
+#### Option 4: Deploy on a VPS (Digital Ocean, AWS, etc.)
+
+For production use with multiple users, a VPS is recommended:
+
+1. SSH into your server
+2. Clone the repository
+3. Install dependencies: `npm install --production`
+4. Run with PM2: `pm2 start server.js --name atmos`
 
 ### Manual Deployment
 
