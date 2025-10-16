@@ -1,7 +1,8 @@
 // socket-handlers.js - Extracted socket handlers from server.js
 const broadcasters = new Map();
 
-export function setupSocketHandlers(io) {
+// Use CommonJS exports for compatibility
+module.exports.setupSocketHandlers = function setupSocketHandlers(io) {
   io.on('connection', (socket) => {
     console.log(`🔌 Client connected: ${socket.id}`);
     

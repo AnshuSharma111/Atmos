@@ -11,7 +11,7 @@
     "server": "node server.js",
     "deploy": "vercel deploy --prod",
     "dev": "vercel dev",
-    "build": "mkdir -p public && cp -r *.html public/ || true",
+    "build": "node build-script.js",
     "test": "jest"
   },
   "dependencies": {
