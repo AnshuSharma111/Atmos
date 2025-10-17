@@ -23,9 +23,17 @@ const io = socketIo(server, {
 // Track active broadcasters
 const broadcasters = new Map(); // Map of broadcaster ID -> metadata
 
-// Configure CORS
-app.use(cors());
-app.use(express.json());
+// Configure CORS - Allow requests from GitHub Pages and any origin
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false
+}));
+
+// Increase JSON body size limit for base64 images (default is 100kb, we need more)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Serve static files
 app.use(express.static(__dirname));
@@ -60,6 +68,9 @@ app.get('/api/debug', (req, res) => {
     environment: process.env.NODE_ENV || 'development'
   });
 });
+
+// Handle CORS preflight for analyze-frame endpoint
+app.options('/api/analyze-frame', cors());
 
 // YOLOv8 Fire/Smoke Detection Endpoint
 app.post('/api/analyze-frame', async (req, res) => {
