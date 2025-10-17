@@ -1999,7 +1999,9 @@
         try {
           console.log(`[YOLO] Sending frame for analysis from ${frame.broadcasterId}`);
           
-          const response = await fetch('/api/analyze-frame', {
+          // Use full server URL for API calls (important for production/GitHub Pages)
+          const serverUrl = CONFIG.getServerUrl();
+          const response = await fetch(`${serverUrl}/api/analyze-frame`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
