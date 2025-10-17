@@ -11,7 +11,8 @@
     "server": "node server.js",
     "build": "node build-script.js",
     "deploy": "gh-pages -d public",
-    "test": "jest"
+    "test": "jest",
+    "production-check": "node production-check.js"
   },
   "dependencies": {
     "@react-native/new-app-screen": "0.82.0",
@@ -21,6 +22,7 @@
     "multer": "^2.0.2",
     "react": "19.1.1",
     "react-native": "0.82.0",
+    "react-native-fs": "^2.20.0",
     "react-native-safe-area-context": "^5.5.2",
     "react-native-vision-camera": "^4.7.2",
     "react-native-webrtc": "^124.0.7",

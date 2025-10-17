@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Atmos Livestream Viewer</title>
+    <title>Atmos Emission Monitoring System</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
       body { 
@@ -278,6 +278,470 @@
         padding: 15px;
       }
       
+      /* AI Detection Results Styles */
+      .detection-results {
+        background: #1e293b;
+        border-radius: 12px;
+        padding: 20px;
+        min-height: 150px;
+      }
+      
+      .detection-empty {
+        text-align: center;
+        padding: 40px;
+        color: #6b7280;
+      }
+      
+      .detection-item {
+        background: #111827;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 12px;
+        border-left: 4px solid #3b82f6;
+      }
+      
+      .detection-item.fire-detected {
+        border-left-color: #ef4444;
+        background: rgba(239, 68, 68, 0.1);
+      }
+      
+      .detection-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      
+      .detection-broadcaster {
+        font-weight: 600;
+        color: #f0f9ff;
+      }
+      
+      .detection-timestamp {
+        font-size: 12px;
+        color: #9ca3af;
+      }
+      
+      .detection-summary {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+      }
+      
+      .detection-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      
+      .detection-badge.safe {
+        background: rgba(34, 197, 94, 0.2);
+        color: #22c55e;
+      }
+      
+      .detection-badge.fire {
+        background: rgba(239, 68, 68, 0.2);
+        color: #ef4444;
+      }
+      
+      .detection-badge.info {
+        background: rgba(59, 130, 246, 0.2);
+        color: #3b82f6;
+      }
+      
+      .detection-objects {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      
+      .object-tag {
+        background: rgba(139, 92, 246, 0.2);
+        color: #a78bfa;
+        padding: 3px 8px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      
+      .object-tag .confidence {
+        opacity: 0.7;
+        margin-left: 4px;
+      }
+      
+      /* Environmental Data Section */
+      .env-data-section {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 30px;
+        border: 1px solid #475569;
+      }
+      
+      .env-data-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+      }
+      
+      .env-data-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #f0f9ff;
+      }
+      
+      .env-data-refresh {
+        background: rgba(59, 130, 246, 0.2);
+        color: #3b82f6;
+        border: 1px solid #3b82f6;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: all 0.2s;
+      }
+      
+      .env-data-refresh:hover {
+        background: rgba(59, 130, 246, 0.3);
+      }
+      
+      .env-data-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 15px;
+      }
+      
+      .env-data-card {
+        background: rgba(15, 23, 42, 0.6);
+        border-radius: 8px;
+        padding: 15px;
+        border-left: 3px solid #3b82f6;
+      }
+      
+      .env-data-card.warning {
+        border-left-color: #f59e0b;
+      }
+      
+      .env-data-card.danger {
+        border-left-color: #ef4444;
+      }
+      
+      .env-card-label {
+        font-size: 12px;
+        color: #9ca3af;
+        margin-bottom: 5px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      
+      .env-card-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #f0f9ff;
+        margin-bottom: 5px;
+      }
+      
+      .env-card-info {
+        font-size: 13px;
+        color: #cbd5e1;
+      }
+      
+      .env-data-loading {
+        text-align: center;
+        padding: 20px;
+        color: #9ca3af;
+      }
+      
+      .env-data-error {
+        text-align: center;
+        padding: 20px;
+        color: #ef4444;
+        background: rgba(239, 68, 68, 0.1);
+        border-radius: 8px;
+      }
+      
+      .location-info {
+        font-size: 13px;
+        color: #9ca3af;
+        margin-top: 10px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      
+      /* Detection Stack Styles */
+      .detection-stack {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      
+      .detection-stack-item {
+        flex: 1;
+        min-width: 300px;
+        background: #111827;
+        border-radius: 8px;
+        padding: 15px;
+        border-left: 4px solid #3b82f6;
+        transition: all 0.3s ease;
+      }
+      
+      .detection-stack-item.fire-detected {
+        border-left-color: #ef4444;
+        background: rgba(239, 68, 68, 0.1);
+      }
+      
+      .detection-stack-item.latest {
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+      }
+      
+      /* Alert Modal Styles */
+      .alert-modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        z-index: 9999;
+        animation: fadeIn 0.3s ease;
+      }
+      
+      .alert-modal-overlay.show {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+      }
+      
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      
+      .alert-modal {
+        background: #1e293b;
+        border-radius: 16px;
+        max-width: 900px;
+        width: 100%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        animation: slideUp 0.3s ease;
+        border: 2px solid #ef4444;
+      }
+      
+      .alert-modal.gas-alert {
+        border-color: #f59e0b;
+      }
+      
+      @keyframes slideUp {
+        from { 
+          transform: translateY(50px);
+          opacity: 0;
+        }
+        to { 
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+      
+      .alert-header {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        padding: 20px 25px;
+        border-radius: 14px 14px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .alert-header.gas-alert {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      }
+      
+      .alert-title {
+        font-size: 24px;
+        font-weight: 700;
+        color: white;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      
+      .alert-close {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+      }
+      
+      .alert-close:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: scale(1.1);
+      }
+      
+      .alert-body {
+        padding: 25px;
+      }
+      
+      .alert-section {
+        margin-bottom: 25px;
+      }
+      
+      .alert-section-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #f0f9ff;
+        margin-bottom: 12px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .alert-frame-container {
+        position: relative;
+        background: #111827;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 2px solid #374151;
+      }
+      
+      .alert-frame-image {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      
+      .alert-frame-overlay {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(239, 68, 68, 0.9);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      
+      .alert-data-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        background: #111827;
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid #374151;
+      }
+      
+      .alert-data-item {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      
+      .alert-data-label {
+        font-size: 12px;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      
+      .alert-data-value {
+        font-size: 22px;
+        font-weight: 700;
+        color: #f0f9ff;
+      }
+      
+      .alert-data-value.danger {
+        color: #ef4444;
+      }
+      
+      .alert-data-value.warning {
+        color: #f59e0b;
+      }
+      
+      .alert-detections {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      
+      .alert-detection-badge {
+        background: rgba(239, 68, 68, 0.2);
+        color: #ef4444;
+        padding: 10px 16px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        border: 1px solid #ef4444;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .alert-actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 20px;
+      }
+      
+      .alert-btn {
+        flex: 1;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      
+      .alert-btn-primary {
+        background: #ef4444;
+        color: white;
+      }
+      
+      .alert-btn-primary:hover {
+        background: #dc2626;
+        transform: translateY(-2px);
+      }
+      
+      .alert-btn-secondary {
+        background: #374151;
+        color: #f0f9ff;
+      }
+      
+      .alert-btn-secondary:hover {
+        background: #4b5563;
+      }
+      
+      .alert-timestamp {
+        text-align: center;
+        color: #9ca3af;
+        font-size: 13px;
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 1px solid #374151;
+      }
+      
       .graph-canvas {
         width: 100%;
         height: 100%;
@@ -287,8 +751,21 @@
   <body>
     <div class="container">
       <div class="header">
-        <h1>Atmos Livestream</h1>
+        <h1>🌍 Atmos Emission Monitoring System</h1>
         <button id="connectBtn" class="btn">Connect</button>
+      </div>
+      
+      <!-- Environmental Data Section -->
+      <div class="env-data-section">
+        <div class="env-data-header">
+          <h2 class="env-data-title">📍 Local Environmental Data</h2>
+          <button class="env-data-refresh" onclick="fetchEnvironmentalData()">🔄 Refresh</button>
+        </div>
+        <div id="envDataContainer">
+          <div class="env-data-loading">
+            🌐 Fetching location and environmental data...
+          </div>
+        </div>
       </div>
       
       <div id="streamGrid" class="stream-grid">
@@ -300,6 +777,7 @@
       
       <div class="status-bar">
         <div id="connectionStatus">Not connected</div>
+        <button class="btn" onclick="testAlert()" style="font-size: 12px; padding: 6px 12px;">🧪 Test Alert</button>
       </div>
       
       <!-- Dashboard Section -->
@@ -344,6 +822,27 @@
             </div>
           </div>
         </div>
+      </div>
+      
+      <!-- AI Detection Results Section -->
+      <div class="sensor-graphs-section">
+        <div class="graphs-header">
+          <h2 class="graphs-title">🔍 AI Detection Results (YOLOv8n)</h2>
+          <p style="font-size: 13px; color: #9ca3af; margin-top: 5px;">Latest 3 predictions • Updates every 3 seconds</p>
+        </div>
+        <div id="detectionResults" class="detection-results">
+          <div class="detection-empty">
+            <p>🤖 Waiting for frames to analyze...</p>
+            <p style="font-size: 12px; color: #6b7280; margin-top: 8px;">Frames are analyzed every 3 seconds for fire, smoke, and other objects</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Alert Modal -->
+    <div id="alertModal" class="alert-modal-overlay">
+      <div id="alertModalContent" class="alert-modal">
+        <!-- Modal content will be dynamically inserted here -->
       </div>
     </div>
     
@@ -415,10 +914,24 @@
         canvas.height = container.clientHeight - 30;
       }
       
-      // Generate random sensor data (simulating CO2 and CH4 readings)
+      // Generate random sensor data with normal distribution (bell curve)
+      // Uses Box-Muller transform for normal distribution
+      function generateNormalRandom(mean, stdDev) {
+        let u1 = Math.random();
+        let u2 = Math.random();
+        let z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+        return Math.max(0, Math.round(mean + z0 * stdDev)); // Ensure non-negative
+      }
+      
       function generateSensorData() {
-        const co2 = Math.floor(Math.random() * (6000 - 400 + 1)) + 400;  // 400-6000 ppm
-        const ch4 = Math.floor(Math.random() * (10000 - 1 + 1)) + 1;     // 1-10000 ppm
+        // CO₂: Normal distribution centered at 900 ppm, stdDev 900
+        // This gives more frequent spikes above 1500 ppm for testing
+        const co2 = generateNormalRandom(900, 900);
+        
+        // CH₄: Normal distribution centered at 50 ppm, stdDev 1000
+        // Most values near 50, rarely exceeds 5000
+        const ch4 = generateNormalRandom(50, 1000);
+        
         return { co2, ch4 };
       }
       
@@ -448,12 +961,361 @@
         document.getElementById('co2CurrentValue').textContent = `${co2} ppm`;
         document.getElementById('ch4CurrentValue').textContent = `${ch4} ppm`;
         
+        // Check thresholds and raise alerts
+        checkGasThresholds(co2, ch4, timeString);
+        
         // Redraw graphs
         drawGraph(co2Ctx, co2Canvas, sensorData.co2, sensorData.timestamps, '#ef4444', 'CO₂ (ppm)');
         drawGraph(ch4Ctx, ch4Canvas, sensorData.ch4, sensorData.timestamps, '#3b82f6', 'CH₄ (ppm)');
         
         console.log(`[SENSOR] CO₂: ${co2} ppm, CH₄: ${ch4} ppm`);
       }
+      
+      // === ALERT SYSTEM ===
+      
+      const ALERT_THRESHOLDS = {
+        co2: 1500,  // 1500 ppm (lowered for better detection)
+        ch4: 5000   // 5000 ppm
+      };
+      
+      // Track last alert times to avoid spam
+      const lastAlerts = {
+        co2: {},  // {broadcasterId: timestamp}
+        ch4: {}   // {broadcasterId: timestamp}
+      };
+      
+      const ALERT_COOLDOWN = 30000; // 30 seconds between same alerts
+      
+      // Check gas thresholds and raise alerts
+      function checkGasThresholds(co2, ch4, timeString) {
+        const now = Date.now();
+        
+        // Get current broadcaster ID (from the frame that triggered this)
+        const broadcasterId = window.currentBroadcasterId || 'Unknown';
+        
+        console.log(`[THRESHOLD CHECK] CO₂: ${co2}, CH₄: ${ch4}, Broadcaster: ${broadcasterId}`);
+        
+        // Check CO₂ threshold
+        if (co2 > ALERT_THRESHOLDS.co2) {
+          console.log(`[ALERT TRIGGERED] CO₂ threshold exceeded: ${co2} > ${ALERT_THRESHOLDS.co2}`);
+          const lastAlert = lastAlerts.co2[broadcasterId] || 0;
+          if (now - lastAlert > ALERT_COOLDOWN) {
+            raiseGasAlert('CO₂', co2, ALERT_THRESHOLDS.co2, broadcasterId, timeString);
+            lastAlerts.co2[broadcasterId] = now;
+          } else {
+            console.log(`[ALERT SKIPPED] CO₂ alert on cooldown (${Math.round((ALERT_COOLDOWN - (now - lastAlert)) / 1000)}s remaining)`);
+          }
+        }
+        
+        // Check CH₄ threshold
+        if (ch4 > ALERT_THRESHOLDS.ch4) {
+          console.log(`[ALERT TRIGGERED] CH₄ threshold exceeded: ${ch4} > ${ALERT_THRESHOLDS.ch4}`);
+          const lastAlert = lastAlerts.ch4[broadcasterId] || 0;
+          if (now - lastAlert > ALERT_COOLDOWN) {
+            raiseGasAlert('CH₄', ch4, ALERT_THRESHOLDS.ch4, broadcasterId, timeString);
+            lastAlerts.ch4[broadcasterId] = now;
+          } else {
+            console.log(`[ALERT SKIPPED] CH₄ alert on cooldown (${Math.round((ALERT_COOLDOWN - (now - lastAlert)) / 1000)}s remaining)`);
+          }
+        }
+      }
+      
+      // Raise gas threshold alert
+      function raiseGasAlert(gasType, value, threshold, broadcasterId, timeString) {
+        console.error(`[ALERT] ${gasType} THRESHOLD EXCEEDED!`, {
+          monitor: broadcasterId,
+          value: value,
+          threshold: threshold,
+          time: timeString
+        });
+        
+        // Get current sensor data
+        const co2Current = sensorData.co2.length > 0 ? sensorData.co2[sensorData.co2.length - 1] : 0;
+        const ch4Current = sensorData.ch4.length > 0 ? sensorData.ch4[sensorData.ch4.length - 1] : 0;
+        
+        // Find the latest frame from this broadcaster
+        const latestFrame = capturedFrames.find(f => f.broadcasterId === broadcasterId);
+        
+        showAlertModal({
+          type: 'gas',
+          gasType: gasType,
+          value: value,
+          threshold: threshold,
+          broadcasterId: broadcasterId,
+          timestamp: timeString,
+          frameDataUrl: latestFrame ? latestFrame.dataUrl : null,
+          sensorData: {
+            co2: co2Current,
+            ch4: ch4Current
+          }
+        });
+      }
+      
+      // Raise fire/smoke detection alert
+      function raiseFireAlert(broadcasterId, detections, frameDataUrl) {
+        console.error(`[ALERT] FIRE/SMOKE DETECTED!`, {
+          monitor: broadcasterId,
+          detections: detections
+        });
+        
+        // Get current sensor data
+        const co2Current = sensorData.co2.length > 0 ? sensorData.co2[sensorData.co2.length - 1] : 0;
+        const ch4Current = sensorData.ch4.length > 0 ? sensorData.ch4[sensorData.ch4.length - 1] : 0;
+        
+        showAlertModal({
+          type: 'fire',
+          broadcasterId: broadcasterId,
+          detections: detections,
+          frameDataUrl: frameDataUrl,
+          timestamp: new Date().toLocaleString(),
+          sensorData: {
+            co2: co2Current,
+            ch4: ch4Current
+          }
+        });
+      }
+      
+      // Show Alert Modal with all data
+      function showAlertModal(alertData) {
+        console.log('[ALERT MODAL] showAlertModal called with:', alertData);
+        
+        const modal = document.getElementById('alertModal');
+        const modalContent = document.getElementById('alertModalContent');
+        
+        console.log('[ALERT MODAL] Modal element:', modal);
+        console.log('[ALERT MODAL] Modal content element:', modalContent);
+        
+        const isFire = alertData.type === 'fire';
+        const isGas = alertData.type === 'gas';
+        
+        let html = `
+          <div class="alert-header ${isGas ? 'gas-alert' : ''}">
+            <div class="alert-title">
+              ${isFire ? '🔥 FIRE/SMOKE DETECTED!' : '🚨 GAS ALERT!'}
+            </div>
+            <button class="alert-close" onclick="closeAlertModal()">✕</button>
+          </div>
+          <div class="alert-body">
+        `;
+        
+        // Frame section
+        if (alertData.frameDataUrl) {
+          html += `
+            <div class="alert-section">
+              <div class="alert-section-title">📸 Captured Frame</div>
+              <div class="alert-frame-container">
+                <img src="${alertData.frameDataUrl}" class="alert-frame-image" alt="Alert Frame">
+                <div class="alert-frame-overlay">
+                  ${isFire ? '🔥 FIRE DETECTED' : '🚨 ALERT'}
+                </div>
+              </div>
+            </div>
+          `;
+        }
+        
+        // Detection details for fire alerts
+        if (isFire && alertData.detections) {
+          html += `
+            <div class="alert-section">
+              <div class="alert-section-title">🎯 Detections</div>
+              <div class="alert-detections">
+          `;
+          alertData.detections.forEach(det => {
+            const confidence = (det.confidence * 100).toFixed(1);
+            const emoji = det.class.toLowerCase().includes('fire') ? '🔥' : 
+                         det.class.toLowerCase().includes('smoke') ? '💨' : '⚠️';
+            html += `
+              <div class="alert-detection-badge">
+                ${emoji} ${det.class} <strong>${confidence}%</strong>
+              </div>
+            `;
+          });
+          html += `
+              </div>
+            </div>
+          `;
+        }
+        
+        // Alert details
+        html += `
+          <div class="alert-section">
+            <div class="alert-section-title">📊 Alert Details</div>
+            <div class="alert-data-grid">
+              <div class="alert-data-item">
+                <div class="alert-data-label">Monitor ID</div>
+                <div class="alert-data-value">${alertData.broadcasterId}</div>
+              </div>
+              <div class="alert-data-item">
+                <div class="alert-data-label">Time</div>
+                <div class="alert-data-value">${alertData.timestamp}</div>
+              </div>
+        `;
+        
+        if (isGas) {
+          html += `
+              <div class="alert-data-item">
+                <div class="alert-data-label">Gas Type</div>
+                <div class="alert-data-value danger">${alertData.gasType}</div>
+              </div>
+              <div class="alert-data-item">
+                <div class="alert-data-label">Current Value</div>
+                <div class="alert-data-value danger">${alertData.value} ppm</div>
+              </div>
+              <div class="alert-data-item">
+                <div class="alert-data-label">Threshold</div>
+                <div class="alert-data-value warning">${alertData.threshold} ppm</div>
+              </div>
+              <div class="alert-data-item">
+                <div class="alert-data-label">Exceeded By</div>
+                <div class="alert-data-value danger">${(alertData.value - alertData.threshold)} ppm</div>
+              </div>
+          `;
+        }
+        
+        html += `
+            </div>
+          </div>
+        `;
+        
+        // Current sensor readings
+        if (alertData.sensorData) {
+          html += `
+            <div class="alert-section">
+              <div class="alert-section-title">🌡️ Current Sensor Readings</div>
+              <div class="alert-data-grid">
+                <div class="alert-data-item">
+                  <div class="alert-data-label">CO₂ Concentration</div>
+                  <div class="alert-data-value ${alertData.sensorData.co2 > ALERT_THRESHOLDS.co2 ? 'danger' : ''}">${alertData.sensorData.co2} ppm</div>
+                </div>
+                <div class="alert-data-item">
+                  <div class="alert-data-label">CH₄ Concentration</div>
+                  <div class="alert-data-value ${alertData.sensorData.ch4 > ALERT_THRESHOLDS.ch4 ? 'danger' : ''}">${alertData.sensorData.ch4} ppm</div>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+        
+        // Action buttons
+        html += `
+            <div class="alert-actions">
+              <button class="alert-btn alert-btn-primary" onclick="acknowledgeAlert()">
+                ✓ Acknowledge Alert
+              </button>
+              <button class="alert-btn alert-btn-secondary" onclick="downloadAlertData()">
+                💾 Download Report
+              </button>
+            </div>
+            <div class="alert-timestamp">
+              Alert triggered at ${new Date().toLocaleString()}
+            </div>
+          </div>
+        `;
+        
+        modalContent.innerHTML = html;
+        modalContent.className = `alert-modal ${isGas ? 'gas-alert' : ''}`;
+        modal.classList.add('show');
+        
+        console.log('[ALERT MODAL] Modal classes:', modal.className);
+        console.log('[ALERT MODAL] Modal should now be visible!');
+        
+        // Store alert data for download
+        window.currentAlertData = alertData;
+        
+        // Play alert sound (optional - you can add audio element)
+        playAlertSound();
+      }
+      
+      // Close alert modal
+      function closeAlertModal() {
+        const modal = document.getElementById('alertModal');
+        modal.classList.remove('show');
+      }
+      
+      // Acknowledge alert
+      function acknowledgeAlert() {
+        console.log('[ALERT] Alert acknowledged by user');
+        closeAlertModal();
+      }
+      
+      // Download alert data as JSON
+      function downloadAlertData() {
+        const data = window.currentAlertData;
+        if (!data) return;
+        
+        const report = {
+          alertType: data.type,
+          timestamp: new Date().toISOString(),
+          broadcasterId: data.broadcasterId,
+          details: data,
+          sensorReadings: data.sensorData
+        };
+        
+        const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `alert_${data.type}_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        console.log('[ALERT] Alert data downloaded');
+      }
+      
+      // Play alert sound
+      function playAlertSound() {
+        // Create a simple beep sound using Web Audio API
+        try {
+          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          
+          oscillator.frequency.value = 800; // Hz
+          oscillator.type = 'sine';
+          
+          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+          
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.5);
+        } catch (e) {
+          console.log('[ALERT] Could not play sound:', e);
+        }
+      }
+      
+      // Close modal when clicking outside
+      document.addEventListener('click', (e) => {
+        const modal = document.getElementById('alertModal');
+        if (e.target === modal) {
+          closeAlertModal();
+        }
+      });
+      
+      // Test alert function (for debugging)
+      function testAlert() {
+        const testType = Math.random() > 0.5 ? 'fire' : 'gas';
+        
+        if (testType === 'fire') {
+          // Test fire alert
+          raiseFireAlert(
+            'Test_Monitor_001',
+            [
+              { class: 'fire', confidence: 0.95, bbox: [100, 200, 300, 400] },
+              { class: 'smoke', confidence: 0.87, bbox: [150, 250, 350, 450] }
+            ],
+            'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQ4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQ4MCIgZmlsbD0iIzMzMyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiNmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPvCflqXvuI8gVEVTVCBGUkFNRTwvdGV4dD48L3N2Zz4='
+          );
+        } else {
+          // Test gas alert
+          raiseGasAlert('CO₂', 2500, ALERT_THRESHOLDS.co2, 'Test_Monitor_001', new Date().toLocaleTimeString());
+        }
+        
+        console.log(`[TEST] Triggered ${testType} alert`);
+      }
+
       
       // Draw graph on canvas
       function drawGraph(ctx, canvas, data, timestamps, color, label) {
@@ -758,6 +1620,8 @@
             console.error('Error adding ICE candidate:', err);
           }
         });
+        
+        // Frame handler removed - using WebRTC video stream instead
       }
       
       // Function to setup WebRTC peer connection
@@ -1106,6 +1970,9 @@
       function addFrameToDashboard(frame) {
         if (!frame) return;
         
+        // Store current broadcaster ID for threshold alerts
+        window.currentBroadcasterId = frame.broadcasterId;
+        
         // Add frame to the beginning of the array
         capturedFrames.unshift(frame);
         
@@ -1120,9 +1987,146 @@
         const { co2, ch4 } = generateSensorData();
         addSensorDataPoint(co2, ch4);
         
+        // Send frame for fire/smoke detection
+        analyzeFrameForFire(frame);
+        
         // Update the dashboard display
         updateDashboard();
       }
+      
+      // Send frame to server for YOLOv8 fire/smoke detection
+      async function analyzeFrameForFire(frame) {
+        try {
+          console.log(`[YOLO] Sending frame for analysis from ${frame.broadcasterId}`);
+          
+          const response = await fetch('/api/analyze-frame', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              image: frame.dataUrl,
+              broadcasterId: frame.broadcasterId,
+              timestamp: frame.timestamp
+            })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+          }
+          
+          const result = await response.json();
+          
+          // Display detection results
+          displayDetectionResult(result, frame);
+          
+          // Check for fire/smoke and raise alert if detected
+          if (result.success && result.fire_detected) {
+            raiseFireAlert(frame.broadcasterId, result.detections, frame.dataUrl);
+          } else if (result.success) {
+            console.log(`[YOLO] Analysis complete: ${result.num_detections} objects detected, no fire/smoke`);
+          } else {
+            console.error('[YOLO] Analysis failed:', result.error);
+          }
+        } catch (error) {
+          console.error('[YOLO] Failed to analyze frame:', error);
+        }
+      }
+      
+      // Display detection results in the UI (Stack of 3)
+      function displayDetectionResult(result, frame) {
+        const resultsContainer = document.getElementById('detectionResults');
+        
+        // Remove empty message if present
+        const emptyMsg = resultsContainer.querySelector('.detection-empty');
+        if (emptyMsg) {
+          emptyMsg.remove();
+        }
+        
+        // Check if we need to create the stack container
+        let stackContainer = resultsContainer.querySelector('.detection-stack');
+        if (!stackContainer) {
+          stackContainer = document.createElement('div');
+          stackContainer.className = 'detection-stack';
+          resultsContainer.appendChild(stackContainer);
+        }
+        
+        // Create detection item
+        const detectionItem = document.createElement('div');
+        detectionItem.className = `detection-stack-item latest ${result.fire_detected ? 'fire-detected' : ''}`;
+        
+        const timestamp = new Date(frame.timestamp).toLocaleTimeString();
+        
+        let html = `
+          <div class="detection-header">
+            <span class="detection-broadcaster">📹 ${frame.broadcasterId}</span>
+            <span class="detection-timestamp">${timestamp}</span>
+          </div>
+          <div class="detection-summary">
+        `;
+        
+        if (result.success) {
+          if (result.fire_detected) {
+            html += `<span class="detection-badge fire">🔥 FIRE/SMOKE DETECTED!</span>`;
+          } else {
+
+            html += `<span class="detection-badge safe">✓ No Fire Detected</span>`;
+          }
+          html += `<span class="detection-badge info">${result.num_detections} object(s)</span>`;
+          
+          // Add detected objects
+          if (result.detections && result.detections.length > 0) {
+            html += `</div><div class="detection-objects">`;
+            result.detections.forEach(det => {
+              const confidence = Math.round(det.confidence * 100);
+              const emoji = getObjectEmoji(det.class);
+              html += `<span class="object-tag">${emoji} ${det.class}<span class="confidence">${confidence}%</span></span>`;
+            });
+          }
+        } else {
+          html += `<span class="detection-badge fire">❌ Analysis Failed</span>`;
+        }
+        
+        html += `</div>`;
+        detectionItem.innerHTML = html;
+        
+        // Remove 'latest' class from all items
+        stackContainer.querySelectorAll('.detection-stack-item').forEach(item => {
+          item.classList.remove('latest');
+        });
+        
+        // Add to top of stack
+        stackContainer.insertBefore(detectionItem, stackContainer.firstChild);
+        
+        // Keep only last 3 results
+        const items = stackContainer.querySelectorAll('.detection-stack-item');
+        if (items.length > 3) {
+          items[items.length - 1].remove();
+        }
+      }
+      
+      // Get emoji for object class
+      function getObjectEmoji(className) {
+        const emojiMap = {
+          'person': '👤',
+          'fire': '🔥',
+          'smoke': '💨',
+          'car': '🚗',
+          'truck': '🚚',
+          'dog': '🐕',
+          'cat': '🐱',
+          'bird': '🐦',
+          'chair': '🪑',
+          'bottle': '🍾',
+          'cup': '☕',
+          'laptop': '💻',
+          'phone': '📱',
+          'tv': '📺',
+          'book': '📖'
+        };
+        return emojiMap[className.toLowerCase()] || '📦';
+      }
+
       
       // Function to update the dashboard display
       function updateDashboard() {
@@ -1219,6 +2223,136 @@
           updateDashboard();
         }
       }, 10000); // Update every 10 seconds to refresh "time ago" text
+      
+      // === ENVIRONMENTAL DATA FETCHING ===
+      
+      // Fetch environmental data (weather + air quality)
+      async function fetchEnvironmentalData() {
+        const container = document.getElementById('envDataContainer');
+        container.innerHTML = '<div class="env-data-loading">🌐 Fetching environmental data...</div>';
+        
+        try {
+          // Get user's location
+          const position = await new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+              reject(new Error('Geolocation not supported'));
+            }
+            navigator.geolocation.getCurrentPosition(resolve, reject);
+          });
+          
+          const { latitude, longitude } = position.coords;
+          
+          // Fetch weather and air quality data using Open-Meteo (free, no API key needed!)
+          const weatherResponse = await fetch(
+            `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&timezone=auto`
+          );
+          
+          const airQualityResponse = await fetch(
+            `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${latitude}&longitude=${longitude}&current=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,ozone&timezone=auto`
+          );
+          
+          if (!weatherResponse.ok || !airQualityResponse.ok) {
+            throw new Error('Failed to fetch environmental data');
+          }
+          
+          const weatherData = await weatherResponse.json();
+          const airQualityData = await airQualityResponse.json();
+          
+          displayEnvironmentalData(weatherData, airQualityData, latitude, longitude);
+          
+        } catch (error) {
+          console.error('Error fetching environmental data:', error);
+          container.innerHTML = `
+            <div class="env-data-error">
+              ❌ Could not fetch environmental data
+              <br><small>${error.message === 'User denied Geolocation' ? 'Please enable location access' : error.message}</small>
+            </div>
+          `;
+        }
+      }
+      
+      // Display environmental data in cards
+      function displayEnvironmentalData(weather, airQuality, lat, lon) {
+        const container = document.getElementById('envDataContainer');
+        
+        const temp = weather.current.temperature_2m;
+        const humidity = weather.current.relative_humidity_2m;
+        const windSpeed = weather.current.wind_speed_10m;
+        
+        const pm25 = airQuality.current.pm2_5;
+        const pm10 = airQuality.current.pm10;
+        const co = airQuality.current.carbon_monoxide;
+        const no2 = airQuality.current.nitrogen_dioxide;
+        const o3 = airQuality.current.ozone;
+        
+        // Calculate AQI level
+        const aqiLevel = getAQILevel(pm25, pm10);
+        const coLevel = getCOLevel(co);
+        
+        container.innerHTML = `
+          <div class="env-data-grid">
+            <div class="env-data-card">
+              <div class="env-card-label">🌡️ Temperature</div>
+              <div class="env-card-value">${temp.toFixed(1)}°C</div>
+              <div class="env-card-info">Humidity: ${humidity}%</div>
+            </div>
+            
+            <div class="env-data-card">
+              <div class="env-card-label">💨 Wind Speed</div>
+              <div class="env-card-value">${windSpeed.toFixed(1)} km/h</div>
+              <div class="env-card-info">Current conditions</div>
+            </div>
+            
+            <div class="env-data-card ${aqiLevel.class}">
+              <div class="env-card-label">🏭 Air Quality (PM2.5)</div>
+              <div class="env-card-value">${pm25.toFixed(1)} µg/m³</div>
+              <div class="env-card-info">${aqiLevel.text}</div>
+            </div>
+            
+            <div class="env-data-card ${coLevel.class}">
+              <div class="env-card-label">🔬 Carbon Monoxide</div>
+              <div class="env-card-value">${co.toFixed(0)} µg/m³</div>
+              <div class="env-card-info">${coLevel.text}</div>
+            </div>
+            
+            <div class="env-data-card">
+              <div class="env-card-label">🌫️ Nitrogen Dioxide</div>
+              <div class="env-card-value">${no2.toFixed(1)} µg/m³</div>
+              <div class="env-card-info">NO₂ levels</div>
+            </div>
+            
+            <div class="env-data-card">
+              <div class="env-card-label">☁️ Ozone</div>
+              <div class="env-card-value">${o3.toFixed(1)} µg/m³</div>
+              <div class="env-card-info">O₃ concentration</div>
+            </div>
+          </div>
+          <div class="location-info">
+            📍 Location: ${lat.toFixed(4)}°, ${lon.toFixed(4)}° • Last updated: ${new Date().toLocaleTimeString()}
+          </div>
+        `;
+      }
+      
+      // Get AQI level from PM2.5 and PM10
+      function getAQILevel(pm25, pm10) {
+        if (pm25 <= 12) return { text: 'Good air quality', class: '' };
+        if (pm25 <= 35) return { text: 'Moderate air quality', class: 'warning' };
+        if (pm25 <= 55) return { text: 'Unhealthy for sensitive groups', class: 'warning' };
+        return { text: 'Unhealthy air quality', class: 'danger' };
+      }
+      
+      // Get CO level assessment
+      function getCOLevel(co) {
+        if (co <= 4000) return { text: 'Normal levels', class: '' };
+        if (co <= 9000) return { text: 'Moderate levels', class: 'warning' };
+        return { text: 'High levels', class: 'danger' };
+      }
+      
+      // Fetch environmental data on page load
+      fetchEnvironmentalData();
+      
+      // Refresh environmental data every 10 minutes
+      setInterval(fetchEnvironmentalData, 600000);
     </script>
   </body>
 </html>

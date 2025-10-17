@@ -1,5 +1,6 @@
 /**
- * Atmos - Simple Broadcaster App
+ * Atmos - Emission Monitoring System
+ * Mobile broadcaster for real-time environmental monitoring
  */
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -29,13 +30,8 @@ import AppConfig from './app.config';
 registerGlobals();
 
 // Use configuration from app.config.js
-// To switch between local and production, edit app.config.js
 const SIGNALING_SERVER_URL = AppConfig.serverUrl;
 const ICE_SERVERS = AppConfig.iceServers;
-
-console.log('🔧 Using configuration:');
-console.log(`   Environment: ${AppConfig.environment}`);
-console.log(`   Server URL: ${SIGNALING_SERVER_URL}`);
 
 function App() {
   return (
@@ -53,14 +49,16 @@ function BroadcasterContent() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [broadcasterId, setBroadcasterId] = useState<string | null>(null);
   const [isPreparingCamera, setIsPreparingCamera] = useState(false);
-  const [useBackCamera, setUseBackCamera] = useState(true); // Track which camera to use
-  const device = useCameraDevice(useBackCamera ? 'back' : 'front'); // Toggle camera for preview
+  
+  // Always use the back camera - THIS WORKS!
+  const device = useCameraDevice('back'); 
+  const cameraRef = useRef<Camera>(null);
   
   // WebRTC-related refs
   const socketRef = useRef<any>(null);
   const peerConnectionsRef = useRef<Map<string, any>>(new Map()); // Map of viewerId -> RTCPeerConnection
   const localStreamRef = useRef<any>(null);
-  const currentCameraIndexRef = useRef<number>(0); // Track which camera index to use for WebRTC
+  const frameIntervalRef = useRef<any>(null);
 
   // Request permissions on component mount
   useEffect(() => {
@@ -89,11 +87,10 @@ function BroadcasterContent() {
         }
       } else {
         // iOS
-        const micPermission = await mediaDevices.getUserMedia({ audio: true });
+        const micPermission = await mediaDevices.getUserMedia({ audio: true }).catch(() => null);
         if (micPermission) {
           setHasMicrophonePermission(true);
-          // Release tracks immediately, we'll get them again when streaming
-          micPermission.getTracks().forEach(track => track.stop());
+          micPermission.getTracks().forEach((track: any) => track.stop());
         }
       }
     };
@@ -108,32 +105,38 @@ function BroadcasterContent() {
 
   // Function to start streaming
   const startStreaming = async () => {
+    console.warn('🚀🚀🚀🚀🚀 START STREAMING CALLED 🚀🚀🚀🚀🚀');
+    
     if (!device || !hasPermission) {
+      console.error('[BROADCASTER] Cannot start - no device or permission');
       Alert.alert('Error', 'Camera permission not granted or device not available');
       return;
     }
 
     try {
-      // Clean up any existing connections
-      stopStreaming();
+      console.warn('🔧 [BROADCASTER] Starting streaming process...');
       
-      // First, set streaming to true which will turn OFF the Camera preview (isActive={!isStreaming})
-      console.log('[BROADCASTER] Disabling camera preview to release camera...');
-      setIsStreaming(true);
+      // Clean up any existing connections
+      await stopStreaming();
+      console.warn('🔧 [BROADCASTER] Previous stream stopped');
+      
+      // STEP 1: Disable Camera component to release hardware
+      console.warn('🔧 [BROADCASTER] Disabling Camera component...');
       setIsPreparingCamera(true);
       
-      // CRITICAL: Wait for Camera component to release the camera hardware
-      // This prevents "Max cameras in use" error when getUserMedia tries to access it
-      console.log('[BROADCASTER] Waiting 1.5 seconds for camera to be fully released...');
-      await new Promise<void>(resolve => setTimeout(() => resolve(), 1500));
-      console.log('[BROADCASTER] Camera should be released now, proceeding with getUserMedia...');
+      // STEP 2: Wait 2 seconds for Camera to fully release the hardware
+      console.warn('🔧 [BROADCASTER] Waiting 2 seconds for camera hardware release...');
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
+      console.warn('🔧 [BROADCASTER] Camera should be released now');
+      
+      // STEP 3: Now set streaming to true (Camera stays off during streaming)
+      setIsStreaming(true);
       
       setIsPreparingCamera(false);
       
-      // Create unique broadcaster ID with timestamp to ensure uniqueness
+      // Create unique broadcaster ID
       const deviceType = Platform.OS === 'ios' ? 'iOS' : 'Android';
       const newBroadcasterId = deviceType + '_' + Math.random().toString(36).substring(2, 8) + '_' + Date.now().toString().slice(-6);
-      console.log(`[BROADCASTER] Generated broadcaster ID: ${newBroadcasterId}`);
       setBroadcasterId(newBroadcasterId);
       
       // Disconnect any existing socket
@@ -142,97 +145,55 @@ function BroadcasterContent() {
         socketRef.current = null;
       }
       
-        console.log(`[BROADCASTER] Connecting to signaling server at ${SIGNALING_SERVER_URL}`);
-        console.log(`[BROADCASTER] Using socket config from app.config.js`);
-        
-        // Connect to signaling server with configuration
-        socketRef.current = io(SIGNALING_SERVER_URL, AppConfig.socketConfig);      // CRITICAL FIX: Wait for socket to connect before proceeding with camera setup
-      // This prevents "Socket not connected" error during registration
+      // Connect to signaling server
+      console.warn(`🔧 [DEBUG] Connecting to signaling server at ${SIGNALING_SERVER_URL}`);
+      socketRef.current = io(SIGNALING_SERVER_URL, AppConfig.socketConfig);
+
+      // CRITICAL FIX: Wait for socket to connect
       await new Promise<void>((resolve, reject) => {
         const connectionTimeout = setTimeout(() => {
           reject(new Error('Socket connection timeout after 60 seconds. Server may be sleeping - try again.'));
-        }, 60000); // 60 seconds for Render wake-up time
+        }, 60000); 
         
-        // Set up socket event handlers
         socketRef.current.on('connect', () => {
           clearTimeout(connectionTimeout);
-          console.log('[BROADCASTER] ✅ Connected to signaling server');
-          console.log('[BROADCASTER] Socket ID:', socketRef.current?.id);
-          console.log('[BROADCASTER] Server URL:', SIGNALING_SERVER_URL);
-          console.log('[BROADCASTER] Socket ready! Now proceeding with camera setup...');
           resolve();
         });
         
         socketRef.current.on('connect_error', (error: any) => {
           clearTimeout(connectionTimeout);
-          console.error('[BROADCASTER] ❌ Socket connection error:', error);
-          console.error('[BROADCASTER] Error type:', error.type);
-          console.error('[BROADCASTER] Error message:', error.message);
-          console.error('[BROADCASTER] Full error:', JSON.stringify(error, null, 2));
-          
-          Alert.alert(
-            'Connection Error', 
-            `Cannot connect to streaming server.\n\n` +
-            `Server: ${SIGNALING_SERVER_URL}\n\n` +
-            `Error: ${error.message}\n\n` +
-            `Common issues:\n` +
-            `1. Server is sleeping (wait 60s and retry)\n` +
-            `2. No internet connection\n` +
-            `3. Server URL incorrect\n` +
-            `4. Firewall blocking connection\n\n` +
-            `Tip: If using Render free tier, first visit the URL in a browser to wake it up.`
-          );
+          console.error('Socket connection error:', error);
+          Alert.alert('Connection Error', `Cannot connect to streaming server.\n\nError: ${error.message}`);
           reject(error);
         });
       });
       
-      // Socket is now connected! Set up remaining event handlers
-      // Flag to track if we've registered successfully
-      let broadcasterRegistered = false;
-      
-      // Listen for confirmation of monitor number assignment which indicates successful registration
+      // Set up remaining socket event handlers
       socketRef.current.on('monitor-number', (data: {broadcasterId: string, number: number}) => {
         if (data.broadcasterId === newBroadcasterId) {
-          console.log(`Broadcaster registration confirmed! Monitor number: ${data.number}`);
-          broadcasterRegistered = true;
+          // Monitor number assigned
         }
       });
       
       socketRef.current.on('disconnect', (reason: string) => {
-        console.log(`Socket disconnected: ${reason}`);
         if (isStreaming) {
           Alert.alert('Connection Lost', 'Lost connection to the streaming server');
         }
       });
       
+      // --- START: WebRTC SDP/ICE Signaling Handlers ---
+
       // Handle viewer connection requests
       socketRef.current.on('viewer-requested-connection', async (data: any) => {
         try {
-          console.log(`[BROADCASTER] Viewer ${data.viewerId} requested connection, creating peer connection and sending offer`);
-          
           if (!localStreamRef.current) {
-            console.error('[BROADCASTER] Cannot send offer - stream not ready');
+            console.error('Cannot send offer - stream not ready');
             Alert.alert('Error', 'Camera stream not ready');
             return;
           }
           
-          // Log stream details
-          const tracks = localStreamRef.current.getTracks();
-          console.log(`[BROADCASTER] Local stream has ${tracks.length} tracks:`, 
-            tracks.map((t: any) => `${t.kind}: enabled=${t.enabled}, muted=${t.muted}, readyState=${t.readyState}`).join(', ')
-          );
+          const currentBroadcasterId = newBroadcasterId;
           
-          // Get the current broadcaster ID from state
-          const currentBroadcasterId = newBroadcasterId; // Use the local variable from startStreaming scope
-          if (!currentBroadcasterId) {
-            console.error('[BROADCASTER] No broadcaster ID available');
-            return;
-          }
-          
-          console.log(`[BROADCASTER] Using broadcaster ID: ${currentBroadcasterId}`);
-          
-          // Create a new peer connection for this viewer
-          console.log('[BROADCASTER] Creating new RTCPeerConnection for viewer');
           const pc = new RTCPeerConnection({
             iceServers: ICE_SERVERS,
             iceTransportPolicy: 'all',
@@ -240,81 +201,40 @@ function BroadcasterContent() {
             rtcpMuxPolicy: 'require'
           });
           
-          console.log(`[BROADCASTER] Peer connection created, signalingState: ${pc.signalingState}`);
-          
-          // Store the peer connection (for now, we'll keep it simple with one viewer)
           peerConnectionsRef.current.set(data.viewerId, pc);
-          console.log(`[BROADCASTER] Stored peer connection for viewer ${data.viewerId}, total connections: ${peerConnectionsRef.current.size}`);
           
-          // Handle ICE candidates for this peer connection
+          // Handle ICE candidates
           (pc as any).onicecandidate = (event: any) => {
             if (event.candidate && socketRef.current) {
-              console.log('[BROADCASTER] Generated ICE candidate for viewer:', event.candidate.candidate.substring(0, 50) + '...');
               socketRef.current.emit('ice-candidate', {
                 candidate: event.candidate,
                 broadcasterId: currentBroadcasterId,
                 targetViewerId: data.viewerId
               });
-            } else if (!event.candidate) {
-              console.log('[BROADCASTER] ICE gathering complete (null candidate)');
             }
           };
           
           // Monitor connection state
           (pc as any).onconnectionstatechange = () => {
-            console.log(`[BROADCASTER] Connection state for viewer ${data.viewerId}: ${pc.connectionState}`);
             if (pc.connectionState === 'connected') {
-              console.log('[BROADCASTER] WebRTC connected to viewer successfully!');
               Alert.alert('Success', 'Connected to monitoring website!');
             } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-              console.log('[BROADCASTER] WebRTC connection failed or closed');
               peerConnectionsRef.current.delete(data.viewerId);
             }
           };
           
-          (pc as any).oniceconnectionstatechange = () => {
-            console.log(`[BROADCASTER] ICE connection state for viewer ${data.viewerId}: ${pc.iceConnectionState}`);
-          };
-          
           // Add all tracks from the local stream to this peer connection
           localStreamRef.current.getTracks().forEach((track: any) => {
-            console.log(`[BROADCASTER] Adding ${track.kind} track to peer connection for viewer ${data.viewerId}`, {
-              id: track.id,
-              enabled: track.enabled,
-              muted: track.muted,
-              readyState: track.readyState
-            });
             pc.addTrack(track, localStreamRef.current);
           });
           
-          console.log(`[BROADCASTER] All tracks added to peer connection`);
+          const offer = await pc.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: false });
           
-          // Create offer with specific constraints to ensure video is included
-          const offerOptions = {
-            offerToReceiveAudio: false,
-            offerToReceiveVideo: false,
-          };
-          
-          console.log('[BROADCASTER] Creating offer with video constraints');
-          const offer = await pc.createOffer(offerOptions);
-          
-          console.log(`[BROADCASTER] Offer created, SDP preview: ${offer.sdp?.substring(0, 100)}...`);
-          console.log(`[BROADCASTER] Offer SDP length: ${offer.sdp?.length} bytes`);
-          
-          // Check if the offer includes video
           if (!offer.sdp?.includes('m=video')) {
-            console.error('[BROADCASTER] CRITICAL ERROR: Offer does NOT contain video media section (m=video)!');
-            Alert.alert('Error', 'Video track missing from offer');
-          } else {
-            console.log('[BROADCASTER] SDP check: m=video section is present.');
-          }
-          
-          if (!offer.sdp?.includes('m=audio')) {
-            console.log('[BROADCASTER] Note: Offer does not contain audio (expected for video-only stream)');
+            console.error('CRITICAL: Offer does NOT contain video media section!');
           }
           
           await pc.setLocalDescription(offer);
-          console.log('[BROADCASTER] Local description set successfully, signalingState:', pc.signalingState);
           
           // Send the offer to the specific viewer
           socketRef.current.emit('offer', {
@@ -323,12 +243,6 @@ function BroadcasterContent() {
             targetViewerId: data.viewerId
           });
           
-          console.log(`[BROADCASTER] Sent targeted offer to viewer ${data.viewerId}`, {
-            broadcasterId: currentBroadcasterId,
-            targetViewerId: data.viewerId,
-            sdpType: pc.localDescription?.type,
-            sdpLength: pc.localDescription?.sdp?.length
-          });
         } catch (err) {
           console.error('[BROADCASTER] Error creating offer for viewer:', err);
           Alert.alert('Error', `Failed to create offer: ${err}`);
@@ -338,45 +252,22 @@ function BroadcasterContent() {
       // Handle answer from viewers
       socketRef.current.on('answer', async (data: any) => {
         try {
-          console.log('[BROADCASTER] Received answer from viewer', data);
-          
           const viewerId = data.viewerId;
-          if (!viewerId) {
-            console.error('[BROADCASTER] Received answer without viewerId');
-            return;
-          }
-          
           const pc = peerConnectionsRef.current.get(viewerId);
-          if (!pc) {
-            console.error(`[BROADCASTER] Received answer but no peer connection for viewer ${viewerId}`);
-            return;
+          if (!pc) return;
+          
+          let sdp = data.sdp;
+          if (sdp && sdp.sdp) { sdp = { type: 'answer', sdp: sdp.sdp }; } 
+          else if (typeof sdp === 'string') { sdp = { type: 'answer', sdp: sdp }; }
+
+          if (sdp.type !== 'answer') {
+             console.error('Invalid SDP type received for answer:', sdp.type);
+             return;
           }
-          
-          console.log(`[BROADCASTER] Processing answer from viewer ${viewerId}, pc state: ${pc.signalingState}`);
-          
-          // Extract SDP
-          let sdp;
-          if (data.sdp && data.sdp.sdp) {
-            sdp = { type: 'answer', sdp: data.sdp.sdp };
-            console.log('[BROADCASTER] Answer format: nested sdp object');
-          } else if (data.sdp && typeof data.sdp.type === 'string' && typeof data.sdp.sdp === 'string') {
-            sdp = data.sdp;
-            console.log('[BROADCASTER] Answer format: full RTCSessionDescription');
-          } else if (typeof data.sdp === 'string') {
-            sdp = { type: 'answer', sdp: data.sdp };
-            console.log('[BROADCASTER] Answer format: raw SDP string');
-          } else {
-            sdp = { type: 'answer', sdp: data };
-            console.log('[BROADCASTER] Answer format: raw data');
-          }
-          
-          console.log(`[BROADCASTER] Answer SDP length: ${sdp.sdp?.length || 0} bytes`);
-          
-          // Set remote description
+
           await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-          console.log(`[BROADCASTER] Remote description set successfully for viewer ${viewerId}, signalingState: ${pc.signalingState}`);
         } catch (err) {
-          console.error('[BROADCASTER] Error handling answer:', err);
+          console.error('Error handling answer:', err);
         }
       });
       
@@ -384,59 +275,96 @@ function BroadcasterContent() {
       socketRef.current.on('ice-candidate', async (data: any) => {
         try {
           const viewerId = data.viewerId;
-          if (!viewerId) {
-            console.warn('Received ICE candidate without viewerId');
-            return;
-          }
-          
           const pc = peerConnectionsRef.current.get(viewerId);
-          if (!pc) {
-            console.warn(`Received ICE candidate but no peer connection for viewer ${viewerId}`);
-            return;
-          }
+          if (!pc) return;
           
           await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-          console.log(`Successfully added ICE candidate from viewer ${viewerId}`);
         } catch (err) {
           console.error('Error adding ICE candidate:', err);
         }
       });
       
-      // Handle camera switch request from viewer
-      socketRef.current.on('switch-camera-request', async (data: any) => {
-        try {
-          console.log(`[BROADCASTER] Received camera switch request from viewer ${data.viewerId}`);
-          
-          // Toggle camera index (0 -> 1, 1 -> 0)
-          currentCameraIndexRef.current = currentCameraIndexRef.current === 0 ? 1 : 0;
-          console.log(`[BROADCASTER] Switching to camera index ${currentCameraIndexRef.current}`);
-          
-          // Also toggle the preview camera
-          setUseBackCamera(prev => !prev);
-          
-          // Stop current stream and restart with different camera
-          await stopStreaming();
-          
-          // Wait a moment for cleanup
-          await new Promise((resolve: any) => setTimeout(resolve, 500));
-          
-          // Restart streaming (will use the toggled camera)
-          await startStreaming();
-          
-          console.log(`[BROADCASTER] ✓ Camera switched successfully`);
-        } catch (err) {
-          console.error('[BROADCASTER] Error switching camera:', err);
-          Alert.alert('Camera Switch Failed', 'Could not switch camera. Please try again.');
+      // --- END: WebRTC SDP/ICE Signaling Handlers ---
+      
+      // Reset any old tracks
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track: any) => track.stop());
+        localStreamRef.current = null;
+      }
+      
+      // Acquire camera stream using explicit device ID
+      let localStream: any;
+      
+      try {
+        const backCameraId = device?.id || '0';
+        localStream = await mediaDevices.getUserMedia({
+          audio: hasMicrophonePermission,
+          video: {
+            deviceId: { exact: backCameraId },
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 30 }
+          }
+        });
+        
+      } catch (mediaError: any) {
+        console.error('[BROADCASTER] Failed to access camera:', mediaError.message);
+        throw new Error(`Camera access failed: ${mediaError.message}`);
+      }
+
+      if (!localStream) {
+        throw new Error('Failed to acquire media stream');
+      }
+      
+      // Save reference to stream
+      localStreamRef.current = localStream;
+
+      // Final track configuration
+      localStream.getTracks().forEach((track: any) => {
+        track.enabled = true;
+        if (track.kind === 'video') {
+          try {
+            track.applyConstraints({ width: 640, height: 480, frameRate: 30 });
+          } catch (constraintError) {
+            console.warn('Could not apply video constraints:', constraintError);
+          }
         }
+        track.onended = () => {
+          Alert.alert('Stream Issue', `The ${track.kind} track ended unexpectedly. Try restarting the stream.`);
+        };
       });
       
-      // Don't create peer connection immediately - wait for viewer requests!
-      // Peer connections will be created in the 'viewer-requested-connection' handler
+      // Stream is ready - register with server
+      if (socketRef.current && socketRef.current.connected) {
+        socketRef.current.emit('register-broadcaster', {
+          id: newBroadcasterId,
+          name: deviceType + ' Camera'
+        });
+      } else {
+        throw new Error('Socket not connected, cannot register!');
+      }
       
-      // First make sure any existing stream is properly cleaned up
+      setIsStreaming(true);
+      Alert.alert('Ready', 'Broadcaster is ready! Viewers can now connect to see your stream.');
+      
+    } catch (err: any) {
+      console.error('Error starting live stream:', err);
+      Alert.alert('Error', `Failed to start streaming: ${err.message || 'Unknown error'}`);
+      // Clean up resources and reset state upon failure
+      setIsStreaming(false);
+      setIsPreparingCamera(false);
+      setBroadcasterId(null);
+      stopStreaming(); // Ensure a final cleanup
+    }
+  };
+
+  // Function to stop streaming
+  const stopStreaming = async () => {
+    try {
+      // Stop all WebRTC tracks first
       if (localStreamRef.current) {
-        console.log('Stopping existing media tracks before requesting new ones');
-        localStreamRef.current.getTracks().forEach((track: any) => {
+        const tracks = localStreamRef.current.getTracks();
+        tracks.forEach((track: any) => {
           try {
             track.stop();
           } catch (error) {
@@ -446,315 +374,52 @@ function BroadcasterContent() {
         localStreamRef.current = null;
       }
       
-      // CRITICAL FIX: react-native-webrtc doesn't always respect facingMode on Android
-      // We need to enumerate devices and explicitly select the back camera
-      console.log('[BROADCASTER] Enumerating video devices to find back camera...');
-      
-      let backCameraDeviceId: string | null = null;
-      try {
-        const devices: any = await mediaDevices.enumerateDevices();
-        console.log('[BROADCASTER] Enumerated devices:', devices.length);
-        
-        const videoDevices = devices.filter((device: any) => device.kind === 'videoinput');
-        console.log('[BROADCASTER] Video devices found:', videoDevices.length);
-        
-        console.log('[BROADCASTER] Available video devices:');
-        videoDevices.forEach((d: any, index: number) => {
-          console.log(`  [${index}] ${d.label || 'Unknown'} (id: ${d.deviceId.substring(0, 20)}..., facing: ${d.facing || 'unknown'})`);
-        });
-        
-        // Use the camera based on currentCameraIndexRef (toggles between cameras)
-        let selectedCamera = null;
-        
-        if (videoDevices.length >= 2) {
-          // Use the current camera index (will toggle between 0 and 1)
-          const cameraIndex = currentCameraIndexRef.current % videoDevices.length;
-          selectedCamera = videoDevices[cameraIndex];
-          console.log(`[BROADCASTER] ✓ Selecting camera at index ${cameraIndex}`);
-          console.log(`[BROADCASTER] Camera details:`, {
-            label: selectedCamera.label || 'Unknown',
-            facing: selectedCamera.facing || 'unknown'
-          });
-        } else if (videoDevices.length === 1) {
-          console.warn('[BROADCASTER] Only one camera available, using it');
-          selectedCamera = videoDevices[0];
-        }
-        
-        if (selectedCamera) {
-          backCameraDeviceId = selectedCamera.deviceId;
-          console.log('[BROADCASTER] ✓✓✓ SELECTED CAMERA:', {
-            label: selectedCamera.label || 'Unknown',
-            deviceId: selectedCamera.deviceId.substring(0, 30) + '...',
-            facing: selectedCamera.facing || 'unknown'
-          });
-        } else {
-          console.error('[BROADCASTER] No camera found!');
-        }
-      } catch (enumError) {
-        console.error('[BROADCASTER] Error enumerating devices:', enumError);
-        console.log('[BROADCASTER] Will fall back to facingMode constraint');
-      }
-      
-      // Use explicit deviceId if we found a back camera, otherwise fall back to facingMode
-      const constraints = backCameraDeviceId ? {
-        audio: hasMicrophonePermission,
-        video: {
-          deviceId: { exact: backCameraDeviceId }, // Use explicit device ID
-          width: { min: 640, ideal: 640, max: 1280 },
-          height: { min: 480, ideal: 480, max: 720 },
-          frameRate: { min: 24, ideal: 30, max: 30 }
-        }
-      } : {
-        audio: hasMicrophonePermission,
-        video: {
-          width: { min: 640, ideal: 640, max: 1280 },
-          height: { min: 480, ideal: 480, max: 720 },
-          frameRate: { min: 24, ideal: 30, max: 30 },
-          facingMode: { ideal: 'environment' } // Fallback to facingMode
-        }
-      };
-      
-      if (backCameraDeviceId) {
-        console.log('[BROADCASTER] Requesting media stream with EXPLICIT deviceId:', backCameraDeviceId.substring(0, 30) + '...');
-      } else {
-        console.log('[BROADCASTER] Requesting media stream with facingMode: environment');
-      }
-      console.log('[BROADCASTER] Full constraints:', JSON.stringify(constraints));
-      
-      try {
-        // Use MediaStream API directly with retries if needed
-        let localStream;
+      // Close all peer connections
+      peerConnectionsRef.current.forEach((pc) => {
         try {
-          localStream = await mediaDevices.getUserMedia(constraints);
-          console.log('[BROADCASTER] getUserMedia SUCCESS with ideal constraints');
-        } catch (initialError: any) {
-          console.error('[BROADCASTER] Initial camera access failed:', initialError);
-          console.error('[BROADCASTER] Error message:', initialError.message);
-          
-          // Check if it's a camera-in-use error
-          if (initialError.message && 
-              (initialError.message.includes('camera') || 
-               initialError.message.includes('in use') ||
-               initialError.message.includes('Max number of active camera') ||
-               initialError.message.toLowerCase().includes('max cameras'))) {
-            
-            console.error('[BROADCASTER] MAX CAMERAS ERROR - Camera not released yet!');
-            
-            Alert.alert(
-              'Camera Release Issue',
-              'The camera preview is still active. This usually resolves after a moment. Please wait 2 seconds and try again, or restart the app if the issue persists.',
-              [
-                { 
-                  text: 'OK',
-                  onPress: () => {
-                    // Reset streaming state so user can try again
-                    setIsStreaming(false);
-                    setBroadcasterId(null);
-                  }
-                }
-              ]
-            );
-            console.error('[BROADCASTER] Camera in use error, aborting');
-            throw new Error('Camera already in use');
-          }
-          
-          console.log('[BROADCASTER] Trying with simpler constraints (keeping back camera deviceId)...');
-          // Fallback to very basic constraints but keep the back camera deviceId
-          const fallbackConstraints = {
-            audio: hasMicrophonePermission,
-            video: backCameraDeviceId ? {
-              deviceId: { exact: backCameraDeviceId } // Keep using back camera
-            } : {
-              facingMode: 'environment' // Fallback to facingMode if deviceId not available
-            }
-          };
-          console.log('[BROADCASTER] Fallback constraints:', JSON.stringify(fallbackConstraints));
-          localStream = await mediaDevices.getUserMedia(fallbackConstraints);
-          console.log('[BROADCASTER] getUserMedia SUCCESS with fallback constraints');
-        }
-        
-        const tracks = localStream.getTracks();
-        console.log(`[BROADCASTER] Got local stream with ${tracks.length} tracks:`,
-          tracks.map((t: any) => `${t.kind}: id=${t.id}, enabled=${t.enabled}, readyState=${t.readyState}`).join(', ')
-        );
-        
-        // Ensure we got video track
-        const videoTracks = localStream.getVideoTracks();
-        if (videoTracks.length === 0) {
-          console.error('[BROADCASTER] CRITICAL: No video track in stream!');
-          throw new Error("No video track available in the media stream");
-        }
-        
-        // Get video track settings to verify which camera we got
-        const videoSettings = videoTracks[0].getSettings();
-        console.log(`[BROADCASTER] Video track details:`, {
-          id: videoTracks[0].id,
-          label: videoTracks[0].label,
-          enabled: videoTracks[0].enabled,
-          muted: videoTracks[0].muted,
-          readyState: videoTracks[0].readyState,
-          settings: videoSettings
-        });
-
-        // Note: Camera verification removed because test confirmed camera 0 is the back camera
-        // Some devices don't report facingMode correctly, but we know from testing that
-        // camera index 0 is the back camera on this device
-        console.log(`[BROADCASTER] ✓ Using camera at index 0 (confirmed as BACK camera via testing)`);
-        console.log(`Video track settings:`, videoTracks[0].getSettings());
-        
-        // Save reference to stream - CRITICAL for viewer connections!
-        localStreamRef.current = localStream;
-        console.log('[BROADCASTER] ✓ localStreamRef.current SET - stream is ready for viewer connections');
-        
-        // Verify the ref is actually set
-        if (!localStreamRef.current) {
-          console.error('[BROADCASTER] ❌ CRITICAL ERROR: localStreamRef.current is NULL after assignment!');
-          throw new Error('Failed to set stream reference');
-        }
-        
-        console.log('[BROADCASTER] Stream has', localStream.getTracks().length, 'tracks');
-        
-        // Log detailed information about each track
-        localStream.getTracks().forEach((track: any) => {
-          console.log(`Track: ${track.kind}, enabled: ${track.enabled}, readyState: ${track.readyState}, ID: ${track.id}`);
-          console.log(`Track settings:`, track.getSettings());
-          
-          // Make sure track is enabled
-          track.enabled = true;
-
-          // FIX: Explicitly apply constraints to the track for video quality
-          if (track.kind === 'video') {
-            try {
-              // Apply preferred constraints again directly to the track
-              track.applyConstraints({ width: 640, height: 480, frameRate: 30 });
-              console.log('Applied constraints to video track successfully.');
-            } catch (constraintError) {
-              console.warn('Could not apply video constraints directly to track:', constraintError);
-            }
-          }
-
-          // Add listener for track ended event
-          track.onended = () => {
-            console.log(`Track ${track.kind} ended unexpectedly`);
-            Alert.alert('Stream Issue', `The ${track.kind} track ended unexpectedly. Try restarting the stream.`);
-          };
-        });
-        
-        // Don't add tracks to a peer connection immediately!
-        // Tracks will be added when a viewer requests connection
-        
-        // Stream is NOW ready - register with server so viewers can see us
-        console.log('[BROADCASTER] ✓ Media stream ready! Now registering with server...');
-        
-        if (socketRef.current && socketRef.current.connected) {
-          socketRef.current.emit('register-broadcaster', {
-            id: newBroadcasterId,
-            name: deviceType + ' Camera'
-          });
-          console.log(`[BROADCASTER] Registered as broadcaster with ID: ${newBroadcasterId}`);
-        } else {
-          console.error('[BROADCASTER] Socket not connected, cannot register!');
-          throw new Error('Socket not connected');
-        }
-        
-        // Stream is ready - broadcaster registered and waiting for viewer connections
-        setIsStreaming(true);
-        console.log('[BROADCASTER] Broadcaster is now ready and waiting for viewer connections');
-        Alert.alert('Ready', 'Broadcaster is ready! Viewers can now connect to see your stream.');
-        
-      } catch (mediaError: any) {
-        console.error('Error getting user media:', mediaError);
-        throw new Error(`Failed to access camera/microphone: ${mediaError.message || 'Permission denied'}`);
-      }
-      
-      // If we reach here without exceptions, streaming is technically started
-      // We rely on the internal promise handling for the final status updates
-      
-    } catch (err: any) {
-      console.error('[BROADCASTER] Error starting live stream:', err);
-      Alert.alert('Error', `Failed to start streaming: ${err.message || 'Unknown error'}`);
-      // Make sure we stop streaming and reset state
-      setIsStreaming(false);
-      setIsPreparingCamera(false);
-      setBroadcasterId(null);
-      stopStreaming();
-    }
-  };
-
-  // Function to stop streaming
-  const stopStreaming = async () => {
-    console.log('[BROADCASTER] Stopping stream and cleaning up resources');
-    
-    // Reset all states
-    setIsPreparingCamera(false);
-    
-    try {
-      // Clean up WebRTC stream FIRST
-      if (localStreamRef.current) {
-        console.log('[BROADCASTER] Stopping all media tracks...');
-        localStreamRef.current.getTracks().forEach((track: any) => {
-          try {
-            track.stop();
-            console.log(`[BROADCASTER] Stopped ${track.kind} track: ${track.id}`);
-          } catch (error) {
-            console.warn(`[BROADCASTER] Error stopping ${track.kind} track:`, error);
-          }
-        });
-        localStreamRef.current = null;
-        console.log('[BROADCASTER] All tracks stopped');
-      }
-      
-      // Close and clean up ALL peer connections
-      console.log(`[BROADCASTER] Closing ${peerConnectionsRef.current.size} peer connections`);
-      peerConnectionsRef.current.forEach((pc, viewerId) => {
-        try {
-          console.log(`[BROADCASTER] Closing peer connection for viewer ${viewerId}`);
           pc.close();
         } catch (error) {
-          console.warn(`[BROADCASTER] Error closing peer connection for viewer ${viewerId}:`, error);
+          console.warn('Error closing peer connection:', error);
         }
       });
       peerConnectionsRef.current.clear();
       
-      // Disconnect and clean up socket
+      // Disconnect socket
       if (socketRef.current) {
-        console.log('[BROADCASTER] Disconnecting from signaling server');
         if (socketRef.current.connected) {
-          // Unregister from server
           if (broadcasterId) {
             socketRef.current.emit('unregister-broadcaster', { id: broadcasterId });
           }
-          
-          // Remove all listeners to prevent memory leaks
-          socketRef.current.off('connect');
-          socketRef.current.off('disconnect');
-          socketRef.current.off('connect_error');
-          socketRef.current.off('viewer-requested-connection');
-          socketRef.current.off('answer');
-          socketRef.current.off('ice-candidate');
-          socketRef.current.off('monitor-number');
-          socketRef.current.off('offer-received');
-          
+          socketRef.current.off(); 
           socketRef.current.disconnect();
         }
         socketRef.current = null;
       }
       
-      // CRITICAL: Wait for camera to be fully released before re-enabling Camera preview
-      console.log('[BROADCASTER] Waiting 1 second for camera resources to be fully released...');
-      await new Promise<void>(resolve => setTimeout(() => resolve(), 1000));
-      console.log('[BROADCASTER] Camera resources released, safe to re-enable preview');
+      // Wait for camera hardware to release
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 3000));
       
     } catch (error) {
-      console.error('[BROADCASTER] Error during cleanup:', error);
+      console.error('Cleanup error:', error);
     } finally {
-      // Always update state regardless of any errors
-      // This will make isActive={!isStreaming} = true and re-enable Camera preview
+      // STEP 5: Now update state to re-enable Camera component
       setIsStreaming(false);
+      setIsPreparingCamera(false);
       setBroadcasterId(null);
-      console.log('[BROADCASTER] Stream stopped, Camera preview re-enabled');
+      console.log('[BROADCASTER] ✅ State updated, Camera component should reactivate');
     }
   };
+
+  // Remove frame streaming loop - we're back to pure WebRTC
+  useEffect(() => {
+    // Cleanup on unmount
+    return () => {
+      if (frameIntervalRef.current) {
+        clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   // Render UI
   return (
@@ -763,11 +428,13 @@ function BroadcasterContent() {
         {device && hasPermission ? (
           <>
             <Camera
+              ref={cameraRef}
               style={styles.camera}
               device={device}
-              isActive={!isStreaming} // Turn OFF camera preview when streaming to avoid conflict
+              isActive={!isStreaming && !isPreparingCamera} // ONLY active when NOT streaming
               video={true}
-              audio={false} // Don't use audio in preview to avoid conflicts
+              photo={true}
+              audio={false}
               enableZoomGesture={true}
             />
             {isPreparingCamera && (
@@ -800,7 +467,7 @@ function BroadcasterContent() {
           onPress={isStreaming ? stopStreaming : startStreaming}
         >
           <Text style={styles.buttonText}>
-            {isStreaming ? 'Stop Streaming' : 'Start Streaming'}
+            {isStreaming ? '🛑 STOP BROADCAST 🛑' : '🚀 START BROADCAST NOW 🚀'}
           </Text>
         </TouchableOpacity>
         

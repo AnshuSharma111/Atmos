@@ -61,6 +61,70 @@ app.get('/api/debug', (req, res) => {
   });
 });
 
+// YOLOv8 Fire/Smoke Detection Endpoint
+app.post('/api/analyze-frame', async (req, res) => {
+  try {
+    const { image, broadcasterId, timestamp } = req.body;
+    
+    if (!image) {
+      return res.status(400).json({ success: false, error: 'No image provided' });
+    }
+    
+    console.log(`[YOLO] Analyzing frame from broadcaster ${broadcasterId}`);
+    
+    // Run Python inference script (pass image via stdin for large data)
+    const { spawn } = require('child_process');
+    const pythonProcess = spawn('python', ['yolo_inference.py']);
+    
+    let outputData = '';
+    let errorData = '';
+    
+    // Write base64 image to stdin
+    pythonProcess.stdin.write(image);
+    pythonProcess.stdin.end();
+    
+    pythonProcess.stdout.on('data', (data) => {
+      outputData += data.toString();
+    });
+    
+    pythonProcess.stderr.on('data', (data) => {
+      const errMsg = data.toString();
+      errorData += errMsg;
+      console.error('[YOLO] Python stderr:', errMsg);
+    });
+    
+    pythonProcess.on('close', (code) => {
+      if (code !== 0) {
+        console.error('[YOLO] Python script exited with code:', code);
+        console.error('[YOLO] Error output:', errorData || 'No error output');
+        console.error('[YOLO] Stdout output:', outputData || 'No stdout');
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Inference failed',
+          details: errorData || `Process exited with code ${code}`,
+          stdout: outputData
+        });
+      }
+      
+      try {
+        const result = JSON.parse(outputData);
+        console.log(`[YOLO] Analysis complete for ${broadcasterId}:`, result);
+        res.json(result);
+      } catch (parseError) {
+        console.error('[YOLO] Failed to parse result:', outputData);
+        res.status(500).json({ 
+          success: false, 
+          error: 'Failed to parse inference result' 
+        });
+      }
+    });
+    
+  } catch (error) {
+    console.error('[YOLO] Server error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Socket.io logic for WebRTC signaling
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
@@ -358,6 +422,18 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('[SERVER] Error handling camera switch request:', error);
     }
+  });
+  
+  // Handle frame event from broadcaster (base64 image)
+  socket.on('frame', (data) => {
+    const { broadcasterId, image, timestamp } = data;
+    // Broadcast to all viewers connected to this broadcaster
+    socket.broadcast.emit('frame', {
+      broadcasterId,
+      image,
+      timestamp
+    });
+    console.log(`[SERVER] Frame relayed from broadcaster ${broadcasterId} to viewers`);
   });
   
   // Handle disconnections
